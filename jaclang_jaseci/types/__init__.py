@@ -13,12 +13,12 @@ OptFiles = Optional[Files]
 class Defaults:
     """Field Default Handler."""
 
-    NONE = field(default=None)
-    LIST = field(default_factory=list)
-    DICT = field(default_factory=dict)
-    SET = field(default_factory=set)
-    BYTES = field(default_factory=bytes)
-    STR = field(default_factory=str)
+    NONE = None
+    LIST: list = field(default_factory=list)
+    DICT: dict = field(default_factory=dict)
+    SET: set = field(default_factory=set)
+    BYTES: bytes = field(default_factory=bytes)
+    STR: str = field(default_factory=str)
 
 
 __all__ = ["File", "Files", "OptFile", "OptFiles", "Defaults"]

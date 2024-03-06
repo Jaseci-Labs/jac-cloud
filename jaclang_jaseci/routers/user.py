@@ -46,7 +46,7 @@ async def root(req: UserRequest) -> ORJSONResponse:
     user: User = await User.Collection.find_by_email(req.email)  # type: ignore
     if not user or not verify(req.password, user.password):
         raise HTTPException(status_code=400, detail="Invalid Email/Password!")
-    user_json = user.json()
+    user_json = user.serialize()
     token = await create_token(user_json)
 
     return ORJSONResponse(content={"token": token, "user": user_json})

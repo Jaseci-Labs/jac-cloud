@@ -5,7 +5,7 @@ from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from re import IGNORECASE, compile
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional, Type, Union
 
 from bson import ObjectId
 
@@ -31,7 +31,7 @@ from ..utils import logger
 
 
 TARGET_NODE_REGEX = compile(r"^(n|e):([^:]*):([a-f\d]{24})$", IGNORECASE)
-JCONTEXT = ContextVar("JCONTEXT")
+JCONTEXT: ContextVar = ContextVar("JCONTEXT")
 
 
 class JType(Enum):
@@ -62,7 +62,7 @@ class ArchCollection(BaseCollection):
         if tgt := doc.get("target"):
             arch._jac_.target = DocAnchor.ref(tgt)
 
-        arch._jac_.is_undirected = doc.get("is_undirected")
+        arch._jac_.is_undirected = bool(doc.get("is_undirected"))
 
         return arch
 
@@ -90,16 +90,24 @@ class DocAnchor:
     root: Optional["Root"] = None
     access: DocAccess = field(default_factory=DocAccess)
     connected: bool = False
-    arch: Union["NodeArchitype", "EdgeArchitype", "Root", "GenericEdge"] = None
-    changes: Optional[dict] = field(default_factory=dict)
-    hashes: Optional[dict[str, int]] = field(default_factory=dict)
-    rollback_changes: Optional[dict] = field(default_factory=dict)
-    rollback_hashes: Optional[dict[str, int]] = field(default_factory=dict)
+    arch: Optional[Union["NodeArchitype", "EdgeArchitype", "Root", "GenericEdge"]] = (
+        None
+    )
+    changes: dict[str, dict[str, Any]] = field(default_factory=dict)
+    hashes: dict[str, int] = field(default_factory=dict)
+    rollback_changes: dict[str, dict[str, Any]] = field(default_factory=dict)
+    rollback_hashes: dict[str, int] = field(default_factory=dict)
 
     @property
     def ref_id(self) -> str:
         """Return id in reference type."""
         return f"{self.type.value}:{self.name}:{self.id}"
+
+    @property
+    def _set(self) -> dict:
+        if "$set" not in self.changes:
+            self.changes["$set"] = {}
+        return self.changes["$set"]
 
     def _add_to_set(
         self, field: str, obj: Union["DocAnchor", ObjectId], remove: bool = False
@@ -107,9 +115,7 @@ class DocAnchor:
         if "$addToSet" not in self.changes:
             self.changes["$addToSet"] = {}
 
-        add_to_set = self.changes.get("$addToSet")
-
-        if field not in add_to_set:
+        if field not in (add_to_set := self.changes["$addToSet"]):
             add_to_set[field] = {"$each": set()}
 
         ops: set = add_to_set[field]["$each"]
@@ -127,9 +133,7 @@ class DocAnchor:
         if "$pull" not in self.changes:
             self.changes["$pull"] = {}
 
-        pull = self.changes.get("$pull")
-
-        if field not in pull:
+        if field not in (pull := self.changes["$pull"]):
             pull[field] = {"$in": set()}
 
         ops: set = pull[field]["$in"]
@@ -188,9 +192,9 @@ class DocAnchor:
             self.access.all = False
             self._set.update({"access.all": False})
 
-    def class_ref(self) -> "type":
+    def class_ref(self) -> Type:
         """Return generated class equivalent for DocAnchor."""
-        return JCLASS[self.type.value].get(self.name)
+        return JCLASS[self.type.value].get(self.name, DocArchitype)
 
     def pull_changes(self) -> dict:
         """Return changes and clear current reference."""
@@ -198,9 +202,9 @@ class DocAnchor:
         self.rollback_hashes = copy(self.hashes)
 
         changes = self.changes
+        _set = changes.pop("$set", {})
         self.changes = {}  # renew reference
 
-        _set = {}
         for key, val in asdict(self.arch).items():
             if (h := hash(dumps(val))) != self.hashes.get(key):
                 self.hashes[key] = h
@@ -216,7 +220,9 @@ class DocAnchor:
         self.hashes = self.rollback_hashes
         self.changes = self.rollback_changes
 
-    def build(self, **kwargs: Any) -> object:  # noqa ANN401
+    def build(
+        self, **kwargs: Any  # noqa ANN401
+    ) -> Union["NodeArchitype", "EdgeArchitype"]:
         """Return generated class instance equivalent for DocAnchor."""
         self.arch = self.class_ref()(**kwargs)
         self.arch._jac_doc_ = self
@@ -282,6 +288,9 @@ class DocAnchor:
 
 class DocArchitype:
     """DocAnchor Class Handler."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa ANN401
+        pass
 
     @property
     def _jac_doc_(self) -> DocAnchor:
@@ -733,6 +742,9 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype):
 class EdgeAnchor(_EdgeAnchor):
     """Overriden EdgeAnchor."""
 
+    source: Optional[Union[NodeArchitype, DocAnchor]] = None
+    target: Optional[Union[NodeArchitype, DocAnchor]] = None
+
     def attach(
         self, src: NodeArchitype, trg: NodeArchitype, is_undirected: bool = False
     ) -> "EdgeAnchor":
@@ -907,4 +919,4 @@ class JacContext:
 Root.__name__ = ""
 GenericEdge.__name__ = ""
 
-JCLASS = {"n": {"": Root}, "e": {"": GenericEdge}}
+JCLASS: dict[str, dict[str, type]] = {"n": {"": Root}, "e": {"": GenericEdge}}

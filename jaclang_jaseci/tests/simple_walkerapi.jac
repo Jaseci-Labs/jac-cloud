@@ -27,8 +27,8 @@ walker post_no_body {
         b = boy(val1="a", val2="b");
         g = girl(val="b");
         b ++> g;
-        `root ++> b;
-        await `root.save();
+        root ++> b;
+        await root.save();
         return True;
     }
 }
@@ -49,7 +49,7 @@ walker post_with_body {
     has a: str;
 
     async can enter1 with `root entry {
-        report `root;
+        report root;
 
         boys = await [-->];
         report boys;
@@ -133,10 +133,10 @@ walker post_with_file {
 
 
     async can enter with `root entry {
-        print(`self.single);
-        print(`self.multiple);
-        print(`self.singleOptional);
-        print(`self.multipleOptional);
+        print(self.single);
+        print(self.multiple);
+        print(self.singleOptional);
+        print(self.multipleOptional);
     }
 }
 
@@ -159,7 +159,7 @@ walker change_new_girl {
         report old;
 
         new = girl(val="new");
-        `here ++> new;
+        here ++> new;
         await new.save();
 
         await old[0].destroy();
@@ -170,18 +170,16 @@ walker change_new_girl {
 
 walker test_array {
     async can enter1 with `root entry {
-        visit await [-->];
-
-        # a = someone();
-        # `root ++> a;
-        # await `root.save();
-        # report a;
+        a = someone();
+        root ++> a;
+        await root.save();
+        report a;
     }
 
     async can enter2 with someone entry {
-        `here.val.append(1);
-        await `here.save();
-        report `here;
+        here.val.append(1);
+        await here.save();
+        report here;
     }
 }
 

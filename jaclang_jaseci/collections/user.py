@@ -1,5 +1,7 @@
 """UserCollection Interface."""
 
+from typing import Optional
+
 from .base import BaseCollection
 
 
@@ -11,9 +13,9 @@ class UserCollection(BaseCollection):
     You may override this if you wish to implement different structure
     """
 
-    __collection__ = "user"
-    __excluded__ = ["password"]
-    __indexes__ = [{"fields": ["email"], "unique": True}]
+    __collection__: Optional[str] = "user"
+    __excluded__: list[str] = ["password"]
+    __indexes__: list[dict] = [{"fields": ["email"], "unique": True}]
 
     @classmethod
     async def find_by_email(cls, email: str) -> object:

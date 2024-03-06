@@ -1,5 +1,7 @@
 """User Models."""
 
+from typing import Any
+
 from bcrypt import gensalt, hashpw
 
 from pydantic import BaseModel, EmailStr, create_model
@@ -13,13 +15,15 @@ NULL_BYTES = bytes()
 class UserCommon(BaseModel):
     """User Common Functionalities."""
 
-    def json(self) -> dict:
+    password: bytes
+
+    def serialize(self) -> dict:
         """Return BaseModel.model_dump excluding the password field."""
         return self.model_dump(exclude={"password"})
 
     def obfuscate(self) -> dict:
         """Return BaseModel.model_dump where the password is hashed."""
-        data = self.json()
+        data = self.serialize()
         if isinstance(self.password, str):
             data["password"] = hashpw(self.password.encode(), gensalt())
         return data
@@ -55,22 +59,20 @@ class User(UserCommon):
     @staticmethod
     def model() -> type["User"]:
         """Retrieve the preferred User Model from subclasses else this class."""
-        if subs := __class__.__subclasses__():
+        if subs := User.__subclasses__():
             return subs[-1]
-        return __class__
+        return User
 
     @staticmethod
     def register_type() -> type:
         """Generate User Registration Model based on preferred User Model for FastAPI endpoint validation."""
-        user_model = {}
-        fields: dict[str, FieldInfo] = __class__.model().model_fields
+        user_model: dict[str, Any] = {}
+        fields: dict[str, FieldInfo] = User.model().model_fields
         for key, val in fields.items():
-            consts = [val.annotation]
             if callable(val.default_factory):
-                consts.append(val.default_factory())
+                user_model[key] = (val.annotation, val.default_factory())
             else:
-                consts.append(...)
-            user_model[key] = tuple(consts)
+                user_model[key] = (val.annotation, ...)
 
         user_model["password"] = (str, ...)
         user_model.pop("id", None)

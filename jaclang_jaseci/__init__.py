@@ -1,11 +1,11 @@
 """JacLang FastAPI."""
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 from .core import FastAPI
 
 
-load_dotenv()
+load_dotenv(find_dotenv(), override=True)
 
 start = FastAPI.start
 

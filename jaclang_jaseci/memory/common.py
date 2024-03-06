@@ -1,7 +1,7 @@
 """Memory Interface."""
 
 from os import getenv
-from typing import Any
+from typing import Any, Awaitable, Optional
 
 from orjson import dumps, loads
 
@@ -18,19 +18,19 @@ class CommonMemory:
     """
 
     __table__ = "common"
-    __redis__: Redis = None
+    __redis__: Optional[Redis] = None
 
     @staticmethod
     def get_rd() -> Redis:
         """Return redis.Redis for Redis connection."""
-        if not isinstance(__class__.__redis__, Redis):
-            __class__.__redis__ = aioredis.from_url(
+        if not isinstance(CommonMemory.__redis__, Redis):
+            CommonMemory.__redis__ = aioredis.from_url(
                 getenv("REDIS_HOST", "redis://localhost"),
                 port=int(getenv("REDIS_PORT", "6379")),
                 username=getenv("REDIS_USER"),
                 password=getenv("REDIS_PASS"),
             )
-        return __class__.__redis__
+        return CommonMemory.__redis__
 
     @classmethod
     async def get(cls, key: str) -> Any:  # noqa: ANN401
@@ -77,27 +77,42 @@ class CommonMemory:
         """Retrieve via key from group."""
         try:
             redis = cls.get_rd()
-            return loads(await redis.hget(cls.__table__, key))
+
+            ops = redis.hget(cls.__table__, key)
+            if isinstance(ops, Awaitable):
+                ops = await ops
+
+            if ops is not None:
+                return loads(ops)
         except Exception:
             logger.exception(f"Error getting key {key} from {cls.__table__}")
-            return None
 
     @classmethod
     async def hkeys(cls) -> list[str]:
         """Retrieve all available keys from group."""
         try:
             redis = cls.get_rd()
-            return await redis.hkeys(cls.__table__)
+
+            ops = redis.hkeys(cls.__table__)
+            if isinstance(ops, Awaitable):
+                ops = await ops
+
+            return ops
         except Exception:
             logger.exception(f"Error getting keys from {cls.__table__}")
-            return None
+            return []
 
     @classmethod
     async def hset(cls, key: str, data: dict) -> bool:
         """Push key value pair to group."""
         try:
             redis = cls.get_rd()
-            return bool(await redis.hset(cls.__table__, key, dumps(data)))
+
+            ops = redis.hset(cls.__table__, key, dumps(data).decode())
+            if isinstance(ops, Awaitable):
+                ops = await ops
+
+            return bool(ops)
         except Exception:
             logger.exception(
                 f"Error setting key {key} from {cls.__table__} with data\n{data}"
@@ -105,11 +120,16 @@ class CommonMemory:
             return False
 
     @classmethod
-    async def hdelete(cls, key: str) -> bool:
+    async def hdelete(cls, *keys: Any) -> bool:  # noqa ANN401
         """Delete via key from group."""
         try:
             redis = cls.get_rd()
-            return bool(await redis.hdel(cls.__table__, key))
+
+            ops = redis.hdel(cls.__table__, *keys)
+            if isinstance(ops, Awaitable):
+                ops = await ops
+
+            return bool(ops)
         except Exception:
-            logger.exception(f"Error deleting key {key} from {cls.__table__}")
+            logger.exception(f"Error deleting key {keys} from {cls.__table__}")
             return False
