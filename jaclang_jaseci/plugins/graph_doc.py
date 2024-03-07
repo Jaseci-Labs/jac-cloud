@@ -1,7 +1,7 @@
 """Graph Docs Plugin."""
 
 from dataclasses import fields
-from typing import Callable, Optional, Type
+from typing import Callable, Optional, Type, Union
 
 from jaclang.core.construct import Architype, DSFunc, EdgeDir
 from jaclang.plugin.default import hookimpl
@@ -126,15 +126,14 @@ class JacPlugin:
         disconnect_occurred = False
         left = [left] if isinstance(left, NodeArchitype) else left
         right = [right] if isinstance(right, NodeArchitype) else right
+
+        jctx: JacContext = JCONTEXT.get()
+        await jctx.populate([edge for node in left for edge in node._jac_.edges])
+
         for i in left:
-            edge_list: list[EdgeArchitype] = [*i._jac_.edges]
-
-            jctx: JacContext = JCONTEXT.get()
-            await jctx.populate(edge_list)
-
             edge_list = [
                 await el.connect() if isinstance(el, DocAnchor) else el
-                for el in edge_list
+                for el in i._jac_.edges
             ]
             edge_list = filter_func(edge_list) if filter_func else edge_list
             for e in edge_list:
@@ -155,7 +154,9 @@ class JacPlugin:
         return disconnect_occurred
 
 
-def populate_collection(cls: type, jtype: JType) -> type:
+def populate_collection(
+    cls: Type[Union[NodeArchitype, EdgeArchitype]], jtype: JType
+) -> type:
     """Override Architype's Collection to support MongoDB operations."""
     cls_name = cls.__name__
     JCLASS[jtype.value][cls_name] = cls
@@ -170,12 +171,12 @@ def populate_collection(cls: type, jtype: JType) -> type:
             __excluded__ = []  # private fields
             __indexes__ = []  # not sure yet
 
-        cls.Collection = Collection
+        cls.Collection = Collection  # type: ignore
     elif not issubclass(coll, ArchCollection):
-        cls.Collection = type(
+        cls.Collection = type(  # type: ignore
             coll.__name__, (coll, ArchCollection), {"__collection__": collection}
         )
     else:
-        cls.Collection = type(coll.__name__, (coll,), {})
+        cls.Collection = type(coll.__name__, (coll,), {})  # type: ignore
 
     return cls

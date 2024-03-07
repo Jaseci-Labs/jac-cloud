@@ -1,12 +1,13 @@
 """Walker API Plugin."""
 
-from dataclasses import Field, _MISSING_TYPE, dataclass
+from dataclasses import Field, _MISSING_TYPE, dataclass, is_dataclass
 from inspect import iscoroutine
 from pydoc import locate
 from re import compile
-from typing import Any, Callable, Optional, Type, TypeVar, Union
+from typing import Any, Callable, Optional, Type, TypeVar, Union, cast
 
 from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
+from fastapi.responses import ORJSONResponse
 
 from jaclang.core.construct import (
     Architype,
@@ -18,7 +19,7 @@ from jaclang.core.construct import (
 from jaclang.plugin.default import hookimpl
 from jaclang.plugin.feature import JacFeature as Jac
 
-from pydantic import create_model
+from pydantic import BaseModel, create_model
 
 from .common import JCONTEXT, JacContext
 from ..securities import authenticator
@@ -57,7 +58,7 @@ class WalkerAnchor(_WalkerAnchor):
 
     async def spawn_call(self, nd: Architype) -> "WalkerArchitype":
         """Invoke data spatial call."""
-        self.path = []
+        self.path: list = []
         self.next = [nd]
         self.returns = []
 
@@ -103,7 +104,7 @@ class WalkerAnchor(_WalkerAnchor):
                         raise ValueError(f"No function {i.name} to call.")
                 if self.disengaged:
                     return self.obj
-        self.ignores = []
+        self.ignores: list = []
         return self.obj
 
 
@@ -164,7 +165,7 @@ class JacPlugin:
         jctx.report(expr)
 
 
-def get_specs(cls: type) -> DefaultSpecs:
+def get_specs(cls: type) -> Type[DefaultSpecs]:
     """Get Specs and inherit from DefaultSpecs."""
     specs = getattr(cls, "Specs", DefaultSpecs)
     if not issubclass(specs, DefaultSpecs):
@@ -173,7 +174,7 @@ def get_specs(cls: type) -> DefaultSpecs:
     return specs
 
 
-def gen_model_field(cls: type, field: Field, is_file: False) -> tuple[Any]:
+def gen_model_field(cls: type, field: Field, is_file: bool = False) -> tuple[type, Any]:
     """Generate Specs for Model Field."""
     consts = [cls]
     if not isinstance(field.default, _MISSING_TYPE):
@@ -183,7 +184,7 @@ def gen_model_field(cls: type, field: Field, is_file: False) -> tuple[Any]:
     else:
         consts.append(File(...) if is_file else ...)
 
-    return tuple(consts)
+    return tuple(consts)  # type: ignore[return-value]
 
 
 def populate_apis(cls: type) -> None:
@@ -191,7 +192,7 @@ def populate_apis(cls: type) -> None:
     specs = get_specs(cls)
     path: str = specs.path or ""
     methods: list = specs.methods or []
-    as_query: dict = specs.as_query or []
+    as_query: Union[str, list] = specs.as_query or []
     auth: bool = specs.auth or False
 
     query = {}
@@ -201,53 +202,53 @@ def populate_apis(cls: type) -> None:
     if path:
         if not path.startswith("/"):
             path = f"/{path}"
-        as_query += PATH_VARIABLE_REGEX.findall(path)
+        if isinstance(as_query, list):
+            as_query += PATH_VARIABLE_REGEX.findall(path)
 
-    fields: dict[str, Field] = cls.__dataclass_fields__
-    for key, val in fields.items():
-        if file_type := FILE.get(val.type):
-            files[key] = gen_model_field(file_type, val, True)
-        else:
-            consts = gen_model_field(locate(val.type), val, True)
-
-            if as_query == "*" or key in as_query:
-                query[key] = consts
+    if is_dataclass(cls):
+        fields: dict[str, Field] = cls.__dataclass_fields__
+        for key, val in fields.items():
+            if file_type := FILE.get(cast(str, val.type)):  # type: ignore[arg-type]
+                files[key] = gen_model_field(file_type, val, True)  # type: ignore[arg-type]
             else:
-                body[key] = consts
+                consts = gen_model_field(locate(val.type), val, True)  # type: ignore[arg-type]
+
+                if as_query == "*" or key in as_query:
+                    query[key] = consts
+                else:
+                    body[key] = consts
 
     payload = {
         "query": (
-            create_model(f"{cls.__name__.lower()}_query_model", **query),
+            create_model(f"{cls.__name__.lower()}_query_model", **query),  # type: ignore[call-overload]
             Depends(),
         ),
         "files": (
-            create_model(f"{cls.__name__.lower()}_files_model", **files),
+            create_model(f"{cls.__name__.lower()}_files_model", **files),  # type: ignore[call-overload]
             Depends(),
         ),
     }
 
     if body:
         payload["body"] = (
-            create_model(f"{cls.__name__.lower()}_body_model", **body),
+            create_model(f"{cls.__name__.lower()}_body_model", **body),  # type: ignore[call-overload]
             ...,
         )
 
-    payload_model = create_model(f"{cls.__name__.lower()}_request_model", **payload)
+    payload_model = create_model(f"{cls.__name__.lower()}_request_model", **payload)  # type: ignore[call-overload]
 
     async def api_entry(
         request: Request,
-        node: str,
+        node: Optional[str],
         payload: payload_model = Depends(),  # type: ignore # noqa: B008
-    ) -> Response:
+    ) -> ORJSONResponse:
         jctx = JacContext(request=request, entry=node)
         JCONTEXT.set(jctx)
 
-        payload = payload.model_dump()
-        wlk = cls(
-            **payload.get("body", {}), **payload["query"], **payload["files"]
-        )._jac_
+        pl = cast(BaseModel, payload).model_dump()
+        wlk = cls(**pl.get("body", {}), **pl["query"], **pl["files"])._jac_
         await wlk.spawn_call(await jctx.get_entry())
-        return jctx.response(wlk.returns)
+        return ORJSONResponse(jctx.response(wlk.returns))
 
     async def api_root(
         request: Request,
@@ -260,9 +261,9 @@ def populate_apis(cls: type) -> None:
 
         walker_method = getattr(router, method)
 
-        settings = {"tags": ["walker"]}
+        settings: dict[str, list[Any]] = {"tags": ["walker"]}
         if auth:
-            settings["dependencies"] = authenticator
+            settings["dependencies"] = cast(list, authenticator)
 
         walker_method(url := f"/{cls.__name__}{path}", summary=url, **settings)(
             api_root
@@ -292,9 +293,9 @@ def specs(
             as_query: Union[str, list] = aq
             auth: bool = a
 
-        cls.Specs = Specs
+        cls.Specs = Specs  # type: ignore[attr-defined]
 
-        populate_apis(cls)
+        populate_apis(cast(type, cls))
 
         return cls
 

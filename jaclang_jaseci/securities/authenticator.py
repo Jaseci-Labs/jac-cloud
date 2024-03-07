@@ -3,6 +3,7 @@
 from os import getenv
 from random import choice
 from string import ascii_letters, digits
+from typing import Any, Optional, cast
 
 
 from fastapi import Depends, Request
@@ -30,7 +31,7 @@ def encrypt(data: dict) -> str:
     return encode(data, key=TOKEN_SECRET, algorithm=TOKEN_ALGORITHM)
 
 
-def decrypt(token: str) -> dict:
+def decrypt(token: str) -> Optional[dict]:
     """Decrypt data."""
     try:
         return decode(token, key=TOKEN_SECRET, algorithms=[TOKEN_ALGORITHM])
@@ -39,7 +40,7 @@ def decrypt(token: str) -> dict:
         return None
 
 
-async def create_token(user: dict) -> str:
+async def create_token(user: dict[str, Any]) -> str:
     """Generate token for current user."""
     user["expiration"] = utc_now(hours=int(getenv("TOKEN_TIMEOUT") or "12"))
     token = encrypt(user)
@@ -59,10 +60,10 @@ async def authenticate(request: Request) -> None:
             and decrypted["expiration"] > utc_now()
             and await TokenMemory.hget(key=token)
         ):
-            user = await User.model().Collection.find_by_id(decrypted["id"])
+            user = cast(User, await User.model().Collection.find_by_id(decrypted["id"]))
             root = await Root.Collection.find_by_id(user.root_id)
-            request.auth_user = user
-            request.auth_root = root
+            request.auth_user = user  # type: ignore[attr-defined]
+            request.auth_root = root  # type: ignore[attr-defined]
             return
 
     raise HTTPException(status_code=401)

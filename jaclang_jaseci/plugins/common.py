@@ -5,7 +5,7 @@ from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from re import IGNORECASE, compile
-from typing import Any, Callable, Optional, Type, Union
+from typing import Any, Callable, Optional, Type, Union, cast
 
 from bson import ObjectId
 
@@ -20,6 +20,8 @@ from jaclang.core.construct import (
     Root as _Root,
     root as base_root,
 )
+
+from motor.motor_asyncio import AsyncIOMotorClientSession
 
 from orjson import dumps
 
@@ -87,12 +89,10 @@ class DocAnchor:
     type: JType
     name: str = ""
     id: ObjectId = field(default_factory=ObjectId)
-    root: Optional["Root"] = None
+    root: Optional[ObjectId] = None
     access: DocAccess = field(default_factory=DocAccess)
     connected: bool = False
-    arch: Optional[Union["NodeArchitype", "EdgeArchitype", "Root", "GenericEdge"]] = (
-        None
-    )
+    arch: Optional[Union["NodeArchitype", "EdgeArchitype"]] = None
     changes: dict[str, dict[str, Any]] = field(default_factory=dict)
     hashes: dict[str, int] = field(default_factory=dict)
     rollback_changes: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -205,10 +205,11 @@ class DocAnchor:
         _set = changes.pop("$set", {})
         self.changes = {}  # renew reference
 
-        for key, val in asdict(self.arch).items():
-            if (h := hash(dumps(val))) != self.hashes.get(key):
-                self.hashes[key] = h
-                _set[f"context.{key}"] = val
+        if self.arch:
+            for key, val in asdict(self.arch).items():
+                if (h := hash(dumps(val))) != self.hashes.get(key):
+                    self.hashes[key] = h
+                    _set[f"context.{key}"] = val
 
         if _set:
             changes["$set"] = _set
@@ -224,9 +225,12 @@ class DocAnchor:
         self, **kwargs: Any  # noqa ANN401
     ) -> Union["NodeArchitype", "EdgeArchitype"]:
         """Return generated class instance equivalent for DocAnchor."""
-        self.arch = self.class_ref()(**kwargs)
-        self.arch._jac_doc_ = self
-        return self.arch
+        arch = self.arch = self.class_ref()(**kwargs)
+
+        if isinstance(arch, DocArchitype):
+            arch._jac_doc_ = self
+
+        return arch
 
     def json(self) -> dict:
         """Return in dictionary type."""
@@ -248,7 +252,7 @@ class DocAnchor:
             )
         return None
 
-    async def connect(self) -> object:
+    async def connect(self) -> Optional[Union["NodeArchitype", "EdgeArchitype"]]:
         """Retrieve the Architype from db and return."""
         data = None
         jctx: JacContext = JCONTEXT.get()
@@ -258,14 +262,18 @@ class DocAnchor:
             return data
 
         cls = self.class_ref()
-        if cls:
-            data = self.arch = await cls.Collection.find_by_id(self.id)
+        if (
+            cls
+            and (data := await cls.Collection.find_by_id(self.id))
+            and isinstance(data, DocArchitype)
+        ):
+            self.arch = data
             jctx.set(data._jac_doc_.id, data)
         return data
 
-    def __eq__(self, other: Union["DocArchitype", "DocAnchor"]) -> bool:
+    def __eq__(self, other: object) -> bool:
         """Override equal implementation."""
-        if other.__class__ is self.__class__:
+        if isinstance(other, DocAnchor):
             return (
                 self.type == other.type
                 and self.name == other.name
@@ -289,6 +297,8 @@ class DocAnchor:
 class DocArchitype:
     """DocAnchor Class Handler."""
 
+    _jac_type_: JType
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa ANN401
         pass
 
@@ -298,13 +308,15 @@ class DocArchitype:
             return jd
 
         jctx: JacContext = JCONTEXT.get()
-        self.__jac_doc__ = DocAnchor(
+        jd = self.__jac_doc__ = DocAnchor(
             type=self._jac_type_,
             name=self.__class__.__name__,
             root=jctx.get_root_id(),
-            arch=self,
         )
-        return self.__jac_doc__
+        if isinstance(self, (NodeArchitype, EdgeArchitype)):
+            jd.arch = self
+
+        return jd
 
     @_jac_doc_.setter
     def _jac_doc_(self, val: DocAnchor) -> None:
@@ -312,14 +324,17 @@ class DocArchitype:
 
     def get_context(self) -> dict:
         """Retrieve context dictionary."""
-        return {"context": asdict(self)}
+        ctx = {}
+        if isinstance(self, (NodeArchitype, EdgeArchitype)):
+            ctx = asdict(self)
+
+        return {"context": ctx}
 
     async def propagate_save(
-        self, changes: dict, session: ClientSession
+        self, changes: dict, session: AsyncIOMotorClientSession  # type: ignore[valid-type]
     ) -> list[UpdateOne]:
         """Propagate saving."""
-        changes = deepcopy(changes)
-        _ops: list[UpdateOne] = []
+        _ops: list[tuple[dict[str, ObjectId], dict[str, Any]]] = []
 
         jd_id = self._jac_doc_.id
 
@@ -337,17 +352,53 @@ class DocArchitype:
                             await danch.arch.save(session)
                         _list[idx] = danch.ref_id
             if _list:
-                _ops.append(UpdateOne({"_id": jd_id}, {ops[0]: target}))
+                _ops.append(({"_id": jd_id}, {ops[0]: target}))
 
         if _set := changes.get("$set"):
             if _ops:
-                _ops[0]._doc["$set"] = _set
+                _ops[0][1].update({"$set": _set})
             else:
-                _ops.append(UpdateOne({"_id": jd_id}, {"$set": _set}))
+                _ops.append(({"_id": jd_id}, {"$set": _set}))
 
-        return _ops
+        return [UpdateOne(*_op) for _op in _ops]
 
-    def __eq__(self, other: "DocArchitype") -> bool:
+    async def save(
+        self, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+    ) -> DocAnchor:
+        """Upsert Architype."""
+        raise Exception("Save function not implemented yet!")
+
+    async def save_with_session(self) -> None:
+        """Upsert Architype with session."""
+        async with await ArchCollection.get_session() as session:  # type: ignore[attr-defined]
+            async with cast(ClientSession, session).start_transaction():  # type: ignore[attr-defined]
+                try:
+                    await self.save(session)
+                    await cast(ClientSession, session).commit_transaction()  # type: ignore[func-returns-value]
+                except Exception:
+                    await cast(ClientSession, session).abort_transaction()  # type: ignore[func-returns-value]
+                    logger.exception("Error saving node!")
+                    raise
+
+    async def destroy(
+        self, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+    ) -> None:
+        """Destroy Architype."""
+        raise Exception("Destroy function not implemented yet!")
+
+    async def destroy_with_session(self) -> None:
+        """Destroy Architype with session."""
+        async with await ArchCollection.get_session() as session:  # type: ignore[attr-defined]
+            async with cast(ClientSession, session).start_transaction():  # type: ignore[attr-defined]
+                try:
+                    await self.destroy(session)
+                    await cast(ClientSession, session).commit_transaction()  # type: ignore[func-returns-value]
+                except Exception:
+                    await cast(ClientSession, session).abort_transaction()  # type: ignore[func-returns-value]
+                    logger.exception(f"Error destroying {self._jac_type_.name}!")
+                    raise
+
+    def __eq__(self, other: object) -> bool:
         """Override equal implementation."""
         if isinstance(other, DocArchitype):
             return self._jac_doc_ == other._jac_doc_
@@ -381,17 +432,17 @@ class NodeArchitype(_NodeArchitype, DocArchitype):
         @classmethod
         def __document__(cls, doc: dict) -> "NodeArchitype":
             """Return parsed NodeArchitype from document."""
-            access: dict = doc.get("access")
+            access = cast(dict, doc.get("access"))
             return cls.build_node(
                 DocAnchor(
                     type=JType.node,
-                    name=doc.get("name"),
-                    id=doc.get("_id"),
-                    root=doc.get("root"),
+                    name=cast(str, doc.get("name")),
+                    id=cast(ObjectId, doc.get("_id")),
+                    root=cast(ObjectId, doc.get("root")),
                     access=DocAccess(
-                        all=access.get("all"),
-                        nodes=set(access.get("nodes")),
-                        roots=set(access.get("roots")),
+                        all=cast(bool, access.get("all")),
+                        nodes=set(cast(list, access.get("nodes"))),
+                        roots=set(cast(list, access.get("roots"))),
                     ),
                     connected=True,
                     hashes={
@@ -412,17 +463,21 @@ class NodeArchitype(_NodeArchitype, DocArchitype):
         if isinstance(jd := getattr(self, "__jac_doc__", None), DocAnchor):
             jd.disconnect_edge(edge._jac_doc_)
 
-    async def destroy_edges(self, session: ClientSession = None) -> None:
+    async def destroy_edges(
+        self, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+    ) -> None:
         """Destroy all EdgeArchitypes."""
         edges = self._jac_.edges
         jctx: JacContext = JCONTEXT.get()
         await jctx.populate(edges)
         for edge in edges:
             if isinstance(edge, DocAnchor):
-                edge: EdgeArchitype = await edge.connect()
+                edge = await edge.connect()
             await edge.destroy(session)
 
-    async def destroy(self, session: ClientSession = None) -> None:
+    async def destroy(
+        self, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+    ) -> None:
         """Destroy NodeArchitype."""
         if session:
             if (jd := self._jac_doc_).connected:
@@ -432,17 +487,11 @@ class NodeArchitype(_NodeArchitype, DocArchitype):
             else:
                 await self.destroy_edges(session)
         else:
-            async with await ArchCollection.get_session() as session:
-                async with session.start_transaction():
-                    try:
-                        await self.destroy(session)
-                        await session.commit_transaction()
-                    except Exception:
-                        await session.abort_transaction()
-                        logger.exception("Error destroying node!")
-                        raise
+            await self.destroy_with_session()
 
-    async def save(self, session: ClientSession = None) -> DocAnchor:
+    async def save(
+        self, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+    ) -> DocAnchor:
         """Upsert NodeArchitype."""
         if session:
             jd = self._jac_doc_
@@ -470,15 +519,7 @@ class NodeArchitype(_NodeArchitype, DocArchitype):
                     jd.rollback()
                     raise
         else:
-            async with await ArchCollection.get_session() as session:
-                async with session.start_transaction():
-                    try:
-                        await self.save(session)
-                        await session.commit_transaction()
-                    except Exception:
-                        await session.abort_transaction()
-                        logger.exception("Error saving node!")
-                        raise
+            await self.save_with_session()
 
         return self._jac_doc_
 
@@ -576,7 +617,9 @@ class Root(NodeArchitype, _Root):
         self._jac_: NodeAnchor = NodeAnchor(obj=self)
 
     @classmethod
-    async def register(cls, session: ClientSession = None) -> None:
+    async def register(
+        cls, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+    ) -> "DocAnchor":
         """Register Root."""
         root = cls()
         root_id = ObjectId()
@@ -588,7 +631,7 @@ class Root(NodeArchitype, _Root):
         )
         return await root.save(session)
 
-    def get_context(self) -> None:
+    def get_context(self) -> dict:
         """Override context retrieval."""
         return {}
 
@@ -598,16 +641,16 @@ class Root(NodeArchitype, _Root):
         @classmethod
         def __document__(cls, doc: dict) -> "Root":
             """Return parsed NodeArchitype from document."""
-            access: dict = doc.get("access")
+            access = cast(dict, doc.get("access"))
             return cls.build_node(
                 DocAnchor(
                     type=JType.node,
-                    id=doc.get("_id"),
-                    root=doc.get("root"),
+                    id=cast(ObjectId, doc.get("_id")),
+                    root=cast(ObjectId, doc.get("root")),
                     access=DocAccess(
-                        all=access.get("all"),
-                        nodes=set(access.get("nodes")),
-                        roots=set(access.get("roots")),
+                        all=cast(bool, access.get("all")),
+                        nodes=set(cast(list, access.get("nodes"))),
+                        roots=set(cast(list, access.get("roots"))),
                     ),
                     connected=True,
                     hashes={
@@ -639,17 +682,17 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype):
         @classmethod
         def __document__(cls, doc: dict) -> "EdgeArchitype":
             """Return parsed EdgeArchitype from document."""
-            access: dict = doc.get("access")
+            access = cast(dict, doc.get("access"))
             return cls.build_edge(
                 DocAnchor(
                     type=JType.edge,
-                    name=doc.get("name"),
-                    id=doc.get("_id"),
-                    root=doc.get("root"),
+                    name=cast(str, doc.get("name")),
+                    id=cast(ObjectId, doc.get("_id")),
+                    root=cast(ObjectId, doc.get("root")),
                     access=DocAccess(
-                        all=access.get("all"),
-                        nodes=set(access.get("nodes")),
-                        roots=set(access.get("roots")),
+                        all=cast(bool, access.get("all")),
+                        nodes=set(cast(list, access.get("nodes"))),
+                        roots=set(cast(list, access.get("roots"))),
                     ),
                     connected=True,
                     hashes={
@@ -660,40 +703,30 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype):
                 doc,
             )
 
-    async def destroy(self, session: ClientSession = None) -> None:
+    async def destroy(
+        self, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+    ) -> None:
         """Destroy EdgeArchitype."""
         if session:
             ea = self._jac_
             if (jd := self._jac_doc_).connected:
                 try:
-                    if isinstance(src := ea.source, DocAnchor):
-                        ea.source = await src.connect()
-
-                    if isinstance(tgt := ea.target, DocAnchor):
-                        ea.target = await tgt.connect()
-
-                    ea.detach()
-                    await ea.source.save(session)
-                    await ea.target.save(session)
+                    await ea.detach()
+                    await ea.source.save(session)  # type: ignore[union-attr]
+                    await ea.target.save(session)  # type: ignore[union-attr]
                     await self.Collection.delete_by_id(jd.id, session)
                     jd.connected = False
                 except Exception:
-                    ea.reattach()
+                    await ea.reattach()
                     raise
             else:
-                ea.detach()
+                await ea.detach()
         else:
-            async with await ArchCollection.get_session() as session:
-                async with session.start_transaction():
-                    try:
-                        await self.destroy(session)
-                        await session.commit_transaction()
-                    except Exception:
-                        await session.abort_transaction()
-                        logger.exception("Error destroying edge!")
-                        raise
+            await self.destroy_with_session()
 
-    async def save(self, session: ClientSession = None) -> DocAnchor:
+    async def save(
+        self, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+    ) -> DocAnchor:
         """Upsert EdgeArchitype."""
         if session:
             jd = self._jac_doc_
@@ -704,8 +737,8 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype):
                     await self.Collection.insert_one(
                         {
                             **jd.json(),
-                            "source": (await self._jac_.source.save(session)).ref_id,
-                            "target": (await self._jac_.target.save(session)).ref_id,
+                            "source": (await self._jac_.source.save(session)).ref_id,  # type: ignore[union-attr]
+                            "target": (await self._jac_.target.save(session)).ref_id,  # type: ignore[union-attr]
                             "is_undirected": self._jac_.is_undirected,
                             **self.get_context(),
                         },
@@ -725,15 +758,7 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype):
                     jd.rollback()
                     raise
         else:
-            async with await ArchCollection.get_session() as session:
-                async with session.start_transaction():
-                    try:
-                        await self.save(session)
-                        await session.commit_transaction()
-                    except Exception:
-                        await session.abort_transaction()
-                        logger.exception("Error saving edge!")
-                        raise
+            await self.save_with_session()
 
         return self._jac_doc_
 
@@ -758,19 +783,37 @@ class EdgeAnchor(_EdgeAnchor):
         trg.connect_edge(self.obj)
         return self
 
-    def reattach(self) -> None:
+    async def reattach(self) -> None:
         """Reattach edge from nodes."""
-        self.source._jac_.edges.append(self.obj)
-        self.source.connect_edge(self.obj, True)
-        self.target._jac_.edges.append(self.obj)
-        self.target.connect_edge(self.obj, True)
+        if isinstance(src := self.source, DocAnchor):
+            src = self.source = await src.connect()
 
-    def detach(self) -> None:
+        if src:
+            src._jac_.edges.append(self.obj)
+            src.connect_edge(self.obj, True)
+
+        if isinstance(tgt := self.target, DocAnchor):
+            tgt = self.target = await tgt.connect()
+
+        if tgt:
+            tgt._jac_.edges.append(self.obj)
+            tgt.connect_edge(self.obj, True)
+
+    async def detach(self) -> None:
         """Detach edge from nodes."""
-        self.source._jac_.edges.remove(self.obj)
-        self.source.disconnect_edge(self.obj)
-        self.target._jac_.edges.remove(self.obj)
-        self.target.disconnect_edge(self.obj)
+        if isinstance(src := self.source, DocAnchor):
+            src = self.source = await src.connect()
+
+        if src:
+            src._jac_.edges.remove(self.obj)
+            src.disconnect_edge(self.obj)
+
+        if isinstance(tgt := self.target, DocAnchor):
+            tgt = self.target = await tgt.connect()
+
+        if tgt:
+            tgt._jac_.edges.remove(self.obj)
+            tgt.disconnect_edge(self.obj)
 
 
 @dataclass(eq=False)
@@ -781,7 +824,7 @@ class GenericEdge(EdgeArchitype):
         """Create Generic Edge."""
         self._jac_: EdgeAnchor = EdgeAnchor(obj=self)
 
-    def get_context(self) -> None:
+    def get_context(self) -> dict:
         """Override context retrieval."""
         return {}
 
@@ -793,16 +836,16 @@ class GenericEdge(EdgeArchitype):
         @classmethod
         def __document__(cls, doc: dict) -> "EdgeArchitype":
             """Return parsed EdgeArchitype from document."""
-            access: dict = doc.get("access")
+            access = cast(dict, doc.get("access"))
             return cls.build_edge(
                 DocAnchor(
                     type=JType.edge,
-                    id=doc.get("_id"),
-                    root=doc.get("root"),
+                    id=cast(ObjectId, doc.get("_id")),
+                    root=cast(ObjectId, doc.get("root")),
                     access=DocAccess(
-                        all=access.get("all"),
-                        nodes=set(access.get("nodes")),
-                        roots=set(access.get("roots")),
+                        all=cast(bool, access.get("all")),
+                        nodes=set(cast(list, access.get("nodes"))),
+                        roots=set(cast(list, access.get("roots"))),
                     ),
                     connected=True,
                     hashes={
@@ -817,16 +860,16 @@ class GenericEdge(EdgeArchitype):
 class JacContext:
     """Jac Lang Context Handler."""
 
-    def __init__(self, request: Request, entry: str = None) -> None:
+    def __init__(self, request: Request, entry: Optional[str] = None) -> None:
         """Create JacContext."""
-        self.__mem__: dict[ObjectId, object] = {}
+        self.__mem__: dict[ObjectId, Union[NodeArchitype, EdgeArchitype]] = {}
         self.request = request
         self.user = getattr(request, "auth_user", None)
-        self.root = getattr(request, "auth_root", base_root)
-        self.reports = []
+        self.root: Root = getattr(request, "auth_root", base_root)
+        self.reports: list[Any] = []
         self.entry = entry
 
-    def get_root_id(self) -> ObjectId:
+    def get_root_id(self) -> Optional[ObjectId]:
         """Retrieve Root Doc Id."""
         if self.root is base_root:
             return None
@@ -836,9 +879,10 @@ class JacContext:
         """Retrieve Node Entry Point."""
         if isinstance(self.entry, str):
             if self.entry and (match := TARGET_NODE_REGEX.search(self.entry)):
-                entry = await JCLASS[match.group(1)][
-                    match.group(2)
-                ].Collection.find_by_id(ObjectId(match.group(3)))
+                entry = await cast(
+                    Union[NodeArchitype, EdgeArchitype],
+                    JCLASS[match.group(1)][match.group(2)],
+                ).Collection.find_by_id(ObjectId(match.group(3)))
                 if isinstance(entry, NodeArchitype):
                     self.entry = entry
                 else:
@@ -850,9 +894,9 @@ class JacContext:
 
         return self.entry
 
-    async def populate(self, danchors: list[DocArchitype, DocAnchor]) -> None:
+    async def populate(self, danchors: list[Union[DocArchitype, DocAnchor]]) -> None:
         """Populate in-memory references."""
-        queue = {}
+        queue: dict[type, dict[str, dict]] = {}
         for danchor in danchors:
             if isinstance(danchor, DocAnchor) and not self.has(danchor.id):
                 cls = danchor.class_ref()
@@ -868,15 +912,23 @@ class JacContext:
         """Check if Architype is existing in memory."""
         return ObjectId(id) in self.__mem__
 
-    def get(self, id: Union[ObjectId, str], default: object = None) -> object:
+    def get(
+        self,
+        id: Union[ObjectId, str],
+        default: Optional[Union["NodeArchitype", "EdgeArchitype"]] = None,
+    ) -> Optional[Union["NodeArchitype", "EdgeArchitype"]]:
         """Retrieve Architype in memory."""
         return self.__mem__.get(ObjectId(id), default)
 
-    def set(self, id: Union[ObjectId, str], obj: object) -> None:
+    def set(
+        self, id: Union[ObjectId, str], obj: Union["NodeArchitype", "EdgeArchitype"]
+    ) -> None:
         """Push Architype in memory via ID."""
         self.__mem__[ObjectId(id)] = obj
 
-    def remove(self, id: Union[ObjectId, str]) -> object:
+    def remove(
+        self, id: Union[ObjectId, str]
+    ) -> Optional[Union["NodeArchitype", "EdgeArchitype"]]:
         """Pull Architype in memory via ID."""
         return self.__mem__.pop(ObjectId(id), None)
 
@@ -884,7 +936,7 @@ class JacContext:
         """Append report."""
         self.reports.append(obj)
 
-    def response(self, returns: list[Any], status: int = 200) -> list:  # noqa: ANN401
+    def response(self, returns: list[Any], status: int = 200) -> dict[str, Any]:
         """Return serialized version of reports."""
         resp = {"status": status, "returns": returns}
 
@@ -901,7 +953,7 @@ class JacContext:
         return resp
 
     def clean_response(
-        self, key: str, val: Any, obj: Union[list, dict]  # noqa: ANN401
+        self, key: Union[str, int], val: Any, obj: Union[list, dict]  # noqa: ANN401
     ) -> None:
         """Cleanup and override current object."""
         if isinstance(val, list):
@@ -910,10 +962,8 @@ class JacContext:
         elif isinstance(val, dict):
             for key, dval in val.items():
                 self.clean_response(key, dval, val)
-        elif isinstance(val, DocArchitype) and (
-            ret_jd := getattr(val, "_jac_doc_", None)
-        ):
-            obj[key] = {"id": ret_jd.ref_id, **val.get_context()}
+        elif isinstance(val, DocArchitype):
+            cast(dict, obj)[key] = {"id": val._jac_doc_.ref_id, **val.get_context()}
 
 
 Root.__name__ = ""

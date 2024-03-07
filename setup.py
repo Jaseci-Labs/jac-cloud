@@ -24,6 +24,7 @@ setup(
         "email-validator==2.1.0.post1",
         "orjson==3.9.13",
         "redis==5.0.1",
+        "types-redis==4.6.0.20240218",
         "python-multipart==0.0.9",
         "httpx==0.27.0",
     ],
