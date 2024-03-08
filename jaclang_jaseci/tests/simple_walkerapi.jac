@@ -15,23 +15,12 @@ class User(BaseUser):
         def __document__(cls, doc) -> "User":
             return User.model()(
                 id=str(doc.pop("_id")),
-                email=doc.pop("email") + "overrided",
+                email=doc.pop("email"),
                 password=doc.pop("password", None) or NULL_BYTES,
                 root_id=str(doc.pop("root_id")),
                 **doc,
             )
 ::py::
-
-walker post_no_body {
-    async can enter with `root entry {
-        b = boy(val1="a", val2="b");
-        g = girl(val="b");
-        b ++> g;
-        root ++> b;
-        await root.save();
-        return True;
-    }
-}
 
 node boy {
     has val1: str, val2: str;
@@ -45,21 +34,29 @@ node someone {
     has val: list = [];
 }
 
-walker post_with_body {
-    has a: str;
+walker create_sample_graph {
+    async can enter with `root entry {
+        b = boy(val1="a", val2="b");
+        g = girl(val="b");
+        b ++> g;
+        root ++> b;
+        await root.save();
+        return True;
+    }
+}
 
+walker visit_sample_graph {
     async can enter1 with `root entry {
         report root;
-
         boys = await [-->];
-        report boys;
+        report boys[0];
         visit boys;
-        return {"sample_return":"1"};
+        return 1;
     }
 
     async can enter2 with boy entry {
         girls = await [-->];
-        report girls;
+        report girls[0];
         visit girls;
         return 2;
     }
@@ -72,6 +69,47 @@ walker post_with_body {
     }
 }
 
+walker update_sample_graph {
+    async can enter1 with `root entry {
+        boys = await [-->];
+        visit boys;
+    }
+
+    async can enter2 with boy entry {
+        old = await [-->];
+        report old[0];
+
+        new = girl(val="new");
+        here ++> new;
+        await new.save();
+
+        await old[0].destroy();
+
+        report (await [-->])[0];
+    }
+}
+
+walker update_inner_field_sample_graph {
+    async can enter1 with `root entry {
+        a = someone();
+        root ++> a;
+        await root.save();
+        report a;
+    }
+
+    async can enter2 with someone entry {
+        here.val.append(1);
+        await here.save();
+        report here;
+    }
+}
+
+walker post_no_body {}
+
+walker post_with_body {
+    has a: str;
+}
+
 walker get_no_body {
     obj Specs {
         static has methods: list = ["get"];
@@ -79,7 +117,6 @@ walker get_no_body {
 }
 
 walker get_with_query {
-    # @query - future improvements instead of adding manually on as_query
     has a: str;
 
     obj Specs {
@@ -88,7 +125,6 @@ walker get_with_query {
 }
 
 walker get_all_query {
-    # @query - future improvements instead of adding manually on as_query
     has a: str;
     has b: str;
 
@@ -144,43 +180,6 @@ walker post_with_body_and_file {
     has val: int;
     has single: File;
     has multiple: Files;
-}
-
-walker change_new_girl {
-    async can enter1 with `root entry {
-        boys = await [-->];
-        visit boys;
-
-        return "your return";
-    }
-
-    async can enter2 with boy entry {
-        old = await [-->];
-        report old;
-
-        new = girl(val="new");
-        here ++> new;
-        await new.save();
-
-        await old[0].destroy();
-
-        report await [-->];
-    }
-}
-
-walker test_array {
-    async can enter1 with `root entry {
-        a = someone();
-        root ++> a;
-        await root.save();
-        report a;
-    }
-
-    async can enter2 with someone entry {
-        here.val.append(1);
-        await here.save();
-        report here;
-    }
 }
 
 with entry:__main__ {
