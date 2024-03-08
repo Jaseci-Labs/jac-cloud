@@ -1,6 +1,6 @@
 """User Models."""
 
-from typing import Any, Mapping, Union, cast
+from typing import Any, Mapping, Type, Union, cast
 
 from bcrypt import gensalt, hashpw
 
@@ -57,7 +57,7 @@ class User(UserCommon):
             )
 
     @staticmethod
-    def model() -> type["User"]:
+    def model() -> Type["User"]:
         """Retrieve the preferred User Model from subclasses else this class."""
         if subs := User.__subclasses__():
             return subs[-1]
