@@ -138,13 +138,16 @@ class BaseCollection:
 
     @classmethod
     async def insert_one(
-        cls, doc: dict, session: Optional[AsyncIOMotorClientSession] = None
+        cls,
+        doc: dict,
+        session: Optional[AsyncIOMotorClientSession] = None,
+        **kwargs: Any,  # noqa: ANN401
     ) -> Optional[ObjectId]:
         """Insert single document and return the inserted id."""
         try:
             collection = await cls.collection(session=session)
 
-            ops = await collection.insert_one(doc, session=session)
+            ops = await collection.insert_one(doc, session=session, **kwargs)
             return ops.inserted_id
         except Exception:
             if session:
@@ -154,13 +157,16 @@ class BaseCollection:
 
     @classmethod
     async def insert_many(
-        cls, docs: list[dict], session: Optional[AsyncIOMotorClientSession] = None
+        cls,
+        docs: list[dict],
+        session: Optional[AsyncIOMotorClientSession] = None,
+        **kwargs: Any,  # noqa: ANN401
     ) -> list[ObjectId]:
         """Insert multiple documents and return the inserted ids."""
         try:
             collection = await cls.collection(session=session)
 
-            ops = await collection.insert_many(docs, session=session)
+            ops = await collection.insert_many(docs, session=session, **kwargs)
             return ops.inserted_ids
         except Exception:
             if session:
@@ -174,12 +180,13 @@ class BaseCollection:
         filter: dict,
         update: dict,
         session: Optional[AsyncIOMotorClientSession] = None,
+        **kwargs: Any,  # noqa: ANN401
     ) -> int:
         """Update single document and return if it's modified or not."""
         try:
             collection = await cls.collection(session=session)
 
-            ops = await collection.update_one(filter, update, session=session)
+            ops = await collection.update_one(filter, update, session=session, **kwargs)
             return ops.modified_count
         except Exception:
             if session:
@@ -193,12 +200,15 @@ class BaseCollection:
         filter: dict,
         update: dict,
         session: Optional[AsyncIOMotorClientSession] = None,
+        **kwargs: Any,  # noqa: ANN401
     ) -> int:
         """Update multiple documents and return how many docs are modified."""
         try:
             collection = await cls.collection(session=session)
 
-            ops = await collection.update_many(filter, update, session=session)
+            ops = await collection.update_many(
+                filter, update, session=session, **kwargs
+            )
             return ops.modified_count
         except Exception:
             if session:
@@ -212,9 +222,10 @@ class BaseCollection:
         id: Union[str, ObjectId],
         update: dict,
         session: Optional[AsyncIOMotorClientSession] = None,
+        **kwargs: Any,  # noqa: ANN401
     ) -> int:
         """Update single document via ID and return if it's modified or not."""
-        return await cls.update_one({"_id": ObjectId(id)}, update, session)
+        return await cls.update_one({"_id": ObjectId(id)}, update, session, **kwargs)
 
     @classmethod
     async def find(
@@ -268,13 +279,16 @@ class BaseCollection:
 
     @classmethod
     async def delete(
-        cls, filter: dict, session: Optional[AsyncIOMotorClientSession] = None
+        cls,
+        filter: dict,
+        session: Optional[AsyncIOMotorClientSession] = None,
+        **kwargs: Any,  # noqa: ANN401
     ) -> int:
         """Delete document/s via filter and return how many documents are deleted."""
         try:
             collection = await cls.collection(session=session)
 
-            ops = await collection.delete_many(filter, session=session)
+            ops = await collection.delete_many(filter, session=session, **kwargs)
             return ops.deleted_count
         except Exception:
             if session:
@@ -284,13 +298,16 @@ class BaseCollection:
 
     @classmethod
     async def delete_one(
-        cls, filter: dict, session: Optional[AsyncIOMotorClientSession] = None
+        cls,
+        filter: dict,
+        session: Optional[AsyncIOMotorClientSession] = None,
+        **kwargs: Any,  # noqa: ANN401
     ) -> int:
         """Delete single document via filter and return if it's deleted or not."""
         try:
             collection = await cls.collection(session=session)
 
-            ops = await collection.delete_one(filter, session=session)
+            ops = await collection.delete_one(filter, session=session, **kwargs)
             return ops.deleted_count
         except Exception:
             if session:
@@ -303,21 +320,23 @@ class BaseCollection:
         cls,
         id: Union[str, ObjectId],
         session: Optional[AsyncIOMotorClientSession] = None,
+        **kwargs: Any,  # noqa: ANN401
     ) -> int:
         """Delete single document via ID and return if it's deleted or not."""
-        return await cls.delete_one({"_id": ObjectId(id)}, session)
+        return await cls.delete_one({"_id": ObjectId(id)}, session, **kwargs)
 
     @classmethod
     async def bulk_write(
         cls,
         ops: list[Union[InsertOne, DeleteMany, DeleteOne, UpdateMany, UpdateOne]],
         session: Optional[AsyncIOMotorClientSession] = None,
+        **kwargs: Any,  # noqa: ANN401
     ) -> dict:
         """Bulk write operations."""
         try:
             collection = await cls.collection(session=session)
 
-            _ops = await collection.bulk_write(ops, session=session)
+            _ops = await collection.bulk_write(ops, session=session, **kwargs)
             return _ops.bulk_api_result
         except Exception:
             if session:
