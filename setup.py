@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from setuptools import find_packages, setup  # type: ignore
+from setuptools import find_packages, setup
 
 
 VERSION = "0.0.1"
@@ -17,6 +17,7 @@ setup(
         "pydantic==2.6.0",
         "pymongo==4.6.1",
         "motor==3.3.2",
+        "motor-types==1.0.0b4",
         "python-dotenv==1.0.1",
         "uvicorn==0.27.0.post1",
         "pyjwt[crypto]==2.8.0",

@@ -20,4 +20,4 @@ class UserCollection(BaseCollection):
     @classmethod
     async def find_by_email(cls, email: str) -> object:
         """Retrieve user via email."""
-        return await cls.find_one(filter={"email": email}, projection=None)
+        return await cls.find_one(filter={"email": email}, projection={})

@@ -54,7 +54,7 @@ class CommonMemory:
             return []
 
     @classmethod
-    async def set(cls, key: str, data: Union[dict, bool]) -> bool:  # noqa: ANN401
+    async def set(cls, key: str, data: Union[dict, bool]) -> bool:
         """Push key value pair."""
         try:
             redis = cls.get_rd()
@@ -105,7 +105,7 @@ class CommonMemory:
             return False
 
     @classmethod
-    async def hdelete(cls, *keys: Any) -> bool:  # noqa ANN401
+    async def hdelete(cls, *keys: Any) -> bool:  # noqa: ANN401
         """Delete via key from group."""
         try:
             redis = cls.get_rd()

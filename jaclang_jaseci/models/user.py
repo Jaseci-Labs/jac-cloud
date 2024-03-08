@@ -1,6 +1,6 @@
 """User Models."""
 
-from typing import Any
+from typing import Any, Mapping, Union, cast
 
 from bcrypt import gensalt, hashpw
 
@@ -41,7 +41,7 @@ class User(UserCommon):
         """UserCollection Integration."""
 
         @classmethod
-        def __document__(cls, doc: dict) -> "User":
+        def __document__(cls, doc: Union[Mapping[str, Any], dict[str, Any]]) -> "User":
             """
             Return parsed User from document.
 
@@ -49,10 +49,10 @@ class User(UserCommon):
             You may override this to specify how/which class it will be casted/based.
             """
             return User.model()(
-                id=str(doc.pop("_id")),
-                email=doc.pop("email"),
-                password=doc.pop("password", None) or NULL_BYTES,
-                root_id=str(doc.pop("root_id")),
+                id=str(doc.get("_id")),
+                email=cast(str, doc.get("email")),
+                password=cast(bytes, doc.get("password")) or NULL_BYTES,
+                root_id=str(doc.get("root_id")),
                 **doc,
             )
 

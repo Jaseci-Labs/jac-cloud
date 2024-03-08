@@ -5,7 +5,7 @@ from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from re import IGNORECASE, compile
-from typing import Any, Callable, Optional, Type, Union, cast
+from typing import Any, Callable, Mapping, Optional, Type, Union, cast
 
 from bson import ObjectId
 
@@ -25,8 +25,7 @@ from motor.motor_asyncio import AsyncIOMotorClientSession
 
 from orjson import dumps
 
-from pymongo import ASCENDING, UpdateOne
-from pymongo.client_session import ClientSession
+from pymongo import ASCENDING, DeleteMany, DeleteOne, InsertOne, UpdateMany, UpdateOne
 
 from ..collections import BaseCollection
 from ..utils import logger
@@ -47,7 +46,9 @@ class ArchCollection(BaseCollection):
     """Default Collection for Architypes."""
 
     @classmethod
-    def build_node(cls, doc_anc: "DocAnchor", doc: dict) -> "NodeArchitype":
+    def build_node(
+        cls, doc_anc: "DocAnchor", doc: Mapping[str, Any]
+    ) -> "NodeArchitype":
         """Translate EdgeArchitypes edges into DocAnchor edges."""
         arch: NodeArchitype = doc_anc.build(**(doc.get("context") or {}))
         arch._jac_.edges = [DocAnchor.ref(edge) for edge in (doc.get("edge") or [])]
@@ -55,7 +56,9 @@ class ArchCollection(BaseCollection):
         return arch
 
     @classmethod
-    def build_edge(cls, doc_anc: "DocAnchor", doc: dict) -> "EdgeArchitype":
+    def build_edge(
+        cls, doc_anc: "DocAnchor", doc: Mapping[str, Any]
+    ) -> "EdgeArchitype":
         """Build EdgeArchitypes from document."""
         arch: EdgeArchitype = doc_anc.build(**(doc.get("context") or {}))
         if src := doc.get("source"):
@@ -222,7 +225,7 @@ class DocAnchor:
         self.changes = self.rollback_changes
 
     def build(
-        self, **kwargs: Any  # noqa ANN401
+        self, **kwargs: Any  # noqa: ANN401
     ) -> Union["NodeArchitype", "EdgeArchitype"]:
         """Return generated class instance equivalent for DocAnchor."""
         arch = self.arch = self.class_ref()(**kwargs)
@@ -299,9 +302,6 @@ class DocArchitype:
 
     _jac_type_: JType
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa ANN401
-        pass
-
     @property
     def _jac_doc_(self) -> DocAnchor:
         if isinstance(jd := getattr(self, "__jac_doc__", None), DocAnchor):
@@ -331,8 +331,8 @@ class DocArchitype:
         return {"context": ctx}
 
     async def propagate_save(
-        self, changes: dict, session: AsyncIOMotorClientSession  # type: ignore[valid-type]
-    ) -> list[UpdateOne]:
+        self, changes: dict, session: AsyncIOMotorClientSession
+    ) -> list[InsertOne[Any] | DeleteMany | DeleteOne | UpdateMany | UpdateOne]:
         """Propagate saving."""
         _ops: list[tuple[dict[str, ObjectId], dict[str, Any]]] = []
 
@@ -363,38 +363,38 @@ class DocArchitype:
         return [UpdateOne(*_op) for _op in _ops]
 
     async def save(
-        self, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+        self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> DocAnchor:
         """Upsert Architype."""
         raise Exception("Save function not implemented yet!")
 
     async def save_with_session(self) -> None:
         """Upsert Architype with session."""
-        async with await ArchCollection.get_session() as session:  # type: ignore[attr-defined]
-            async with cast(ClientSession, session).start_transaction():  # type: ignore[attr-defined]
+        async with await ArchCollection.get_session() as session:
+            async with session.start_transaction():
                 try:
                     await self.save(session)
-                    await cast(ClientSession, session).commit_transaction()  # type: ignore[func-returns-value]
+                    await session.commit_transaction()
                 except Exception:
-                    await cast(ClientSession, session).abort_transaction()  # type: ignore[func-returns-value]
+                    await session.abort_transaction()
                     logger.exception("Error saving node!")
                     raise
 
     async def destroy(
-        self, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+        self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
         """Destroy Architype."""
         raise Exception("Destroy function not implemented yet!")
 
     async def destroy_with_session(self) -> None:
         """Destroy Architype with session."""
-        async with await ArchCollection.get_session() as session:  # type: ignore[attr-defined]
-            async with cast(ClientSession, session).start_transaction():  # type: ignore[attr-defined]
+        async with await ArchCollection.get_session() as session:
+            async with session.start_transaction():
                 try:
                     await self.destroy(session)
-                    await cast(ClientSession, session).commit_transaction()  # type: ignore[func-returns-value]
+                    await session.commit_transaction()
                 except Exception:
-                    await cast(ClientSession, session).abort_transaction()  # type: ignore[func-returns-value]
+                    await session.abort_transaction()
                     logger.exception(f"Error destroying {self._jac_type_.name}!")
                     raise
 
@@ -430,7 +430,7 @@ class NodeArchitype(_NodeArchitype, DocArchitype):
         ]
 
         @classmethod
-        def __document__(cls, doc: dict) -> "NodeArchitype":
+        def __document__(cls, doc: Mapping[str, Any]) -> "NodeArchitype":
             """Return parsed NodeArchitype from document."""
             access = cast(dict, doc.get("access"))
             return cls.build_node(
@@ -464,7 +464,7 @@ class NodeArchitype(_NodeArchitype, DocArchitype):
             jd.disconnect_edge(edge._jac_doc_)
 
     async def destroy_edges(
-        self, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+        self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
         """Destroy all EdgeArchitypes."""
         edges = self._jac_.edges
@@ -476,7 +476,7 @@ class NodeArchitype(_NodeArchitype, DocArchitype):
             await edge.destroy(session)
 
     async def destroy(
-        self, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+        self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
         """Destroy NodeArchitype."""
         if session:
@@ -490,7 +490,7 @@ class NodeArchitype(_NodeArchitype, DocArchitype):
             await self.destroy_with_session()
 
     async def save(
-        self, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+        self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> DocAnchor:
         """Upsert NodeArchitype."""
         if session:
@@ -618,7 +618,7 @@ class Root(NodeArchitype, _Root):
 
     @classmethod
     async def register(
-        cls, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+        cls, session: Optional[AsyncIOMotorClientSession] = None
     ) -> "DocAnchor":
         """Register Root."""
         root = cls()
@@ -639,7 +639,7 @@ class Root(NodeArchitype, _Root):
         """Default Root Collection."""
 
         @classmethod
-        def __document__(cls, doc: dict) -> "Root":
+        def __document__(cls, doc: Mapping[str, Any]) -> "Root":
             """Return parsed NodeArchitype from document."""
             access = cast(dict, doc.get("access"))
             return cls.build_node(
@@ -680,7 +680,7 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype):
         ]
 
         @classmethod
-        def __document__(cls, doc: dict) -> "EdgeArchitype":
+        def __document__(cls, doc: Mapping[str, Any]) -> "EdgeArchitype":
             """Return parsed EdgeArchitype from document."""
             access = cast(dict, doc.get("access"))
             return cls.build_edge(
@@ -704,7 +704,7 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype):
             )
 
     async def destroy(
-        self, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+        self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
         """Destroy EdgeArchitype."""
         if session:
@@ -725,7 +725,7 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype):
             await self.destroy_with_session()
 
     async def save(
-        self, session: Optional[AsyncIOMotorClientSession] = None  # type: ignore[valid-type]
+        self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> DocAnchor:
         """Upsert EdgeArchitype."""
         if session:
@@ -834,7 +834,7 @@ class GenericEdge(EdgeArchitype):
         __collection__ = "edge"
 
         @classmethod
-        def __document__(cls, doc: dict) -> "EdgeArchitype":
+        def __document__(cls, doc: Mapping[str, Any]) -> "EdgeArchitype":
             """Return parsed EdgeArchitype from document."""
             access = cast(dict, doc.get("access"))
             return cls.build_edge(
