@@ -5,9 +5,11 @@ from typing import (
     Any,
     AsyncGenerator,
     Awaitable,
+    Generic,
     Iterable,
     Mapping,
     Optional,
+    TypeVar,
     Union,
 )
 
@@ -33,8 +35,10 @@ from pymongo.server_api import ServerApi
 
 from ..utils import logger
 
+T = TypeVar("T")
 
-class BaseCollection:
+
+class BaseCollection(Generic[T]):
     """
     Base collection interface.
 
@@ -51,9 +55,7 @@ class BaseCollection:
     __database__: Optional[AsyncIOMotorDatabase] = None
 
     @classmethod
-    def __document__(
-        cls, doc: Union[Mapping[str, Any], dict[str, Any]]
-    ) -> Union[dict, object]:
+    def __document__(cls, doc: Mapping[str, Any]) -> Union[T, Mapping[str, Any]]:
         """
         Return parsed version of document.
 
@@ -65,7 +67,7 @@ class BaseCollection:
     @classmethod
     async def __documents__(
         cls, docs: AsyncIOMotorCursor
-    ) -> AsyncGenerator[Union[dict, object], None]:
+    ) -> AsyncGenerator[Union[T, Mapping[str, Any]], None]:
         """
         Return parsed version of multiple documents.
 
@@ -234,7 +236,7 @@ class BaseCollection:
         projection: Optional[Union[Mapping[str, Any], Iterable[str]]] = None,
         session: Optional[AsyncIOMotorClientSession] = None,
         **kwargs: Any,  # noqa: ANN401
-    ) -> AsyncGenerator[Union[dict, object], None]:
+    ) -> AsyncGenerator[Union[T, Mapping[str, Any]], None]:
         """Retrieve multiple documents."""
         collection = await cls.collection()
 
@@ -251,7 +253,7 @@ class BaseCollection:
         projection: Optional[Union[Mapping[str, Any], Iterable[str]]] = None,
         session: Optional[AsyncIOMotorClientSession] = None,
         **kwargs: Any,  # noqa: ANN401
-    ) -> object:
+    ) -> Optional[Union[T, Mapping[str, Any]]]:
         """Retrieve single document from db."""
         collection = await cls.collection()
 
@@ -271,7 +273,7 @@ class BaseCollection:
         projection: Optional[Union[Mapping[str, Any], Iterable[str]]] = None,
         session: Optional[AsyncIOMotorClientSession] = None,
         **kwargs: Any,  # noqa: ANN401
-    ) -> object:
+    ) -> Optional[Union[T, Mapping[str, Any]]]:
         """Retrieve single document via ID."""
         return await cls.find_one(
             {"_id": ObjectId(id)}, projection, session=session, **kwargs

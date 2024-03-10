@@ -1,11 +1,13 @@
 """UserCollection Interface."""
 
-from typing import Optional
+from typing import Any, Mapping, Optional, TypeVar, Union
 
 from .base import BaseCollection
 
+T = TypeVar("T")
 
-class UserCollection(BaseCollection):
+
+class UserCollection(BaseCollection[T]):
     """
     User collection interface.
 
@@ -18,6 +20,6 @@ class UserCollection(BaseCollection):
     __indexes__: list[dict] = [{"fields": ["email"], "unique": True}]
 
     @classmethod
-    async def find_by_email(cls, email: str) -> object:
+    async def find_by_email(cls, email: str) -> Optional[Union[T, Mapping[str, Any]]]:
         """Retrieve user via email."""
         return await cls.find_one(filter={"email": email}, projection={})

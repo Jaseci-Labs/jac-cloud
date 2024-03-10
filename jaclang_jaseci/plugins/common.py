@@ -5,7 +5,7 @@ from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from re import IGNORECASE, compile
-from typing import Any, Callable, Mapping, Optional, Type, Union, cast
+from typing import Any, Callable, Mapping, Optional, Type, TypeVar, Union, cast
 
 from bson import ObjectId
 
@@ -33,6 +33,7 @@ from ..utils import logger
 
 TARGET_NODE_REGEX = compile(r"^(n|e):([^:]*):([a-f\d]{24})$", IGNORECASE)
 JCONTEXT: ContextVar = ContextVar("JCONTEXT")
+T = TypeVar("T")
 
 
 class JType(Enum):
@@ -42,7 +43,7 @@ class JType(Enum):
     edge = "e"
 
 
-class ArchCollection(BaseCollection):
+class ArchCollection(BaseCollection[T]):
     """Default Collection for Architypes."""
 
     @classmethod
@@ -421,7 +422,7 @@ class NodeArchitype(_NodeArchitype, DocArchitype):
         """Create node architype."""
         self._jac_: NodeAnchor = NodeAnchor(obj=self)
 
-    class Collection(ArchCollection):
+    class Collection(ArchCollection["NodeArchitype"]):
         """Default NodeArchitype Collection."""
 
         __collection__ = "node"
@@ -635,8 +636,13 @@ class Root(NodeArchitype, _Root):
         """Override context retrieval."""
         return {}
 
-    class Collection(NodeArchitype.Collection):
+    class Collection(ArchCollection["Root"]):
         """Default Root Collection."""
+
+        __collection__ = "node"
+        __indexes__ = [
+            {"fields": [("_id", ASCENDING), ("name", ASCENDING), ("root", ASCENDING)]}
+        ]
 
         @classmethod
         def __document__(cls, doc: Mapping[str, Any]) -> "Root":
@@ -671,7 +677,7 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype):
         """Create EdgeArchitype."""
         self._jac_: EdgeAnchor = EdgeAnchor(obj=self)
 
-    class Collection(ArchCollection):
+    class Collection(ArchCollection["EdgeArchitype"]):
         """Default EdgeArchitype Collection."""
 
         __collection__ = "edge"
@@ -828,10 +834,13 @@ class GenericEdge(EdgeArchitype):
         """Override context retrieval."""
         return {}
 
-    class Collection(EdgeArchitype.Collection):
-        """Default GenericEdge Collection."""
+    class Collection(ArchCollection["GenericEdge"]):
+        """Default Generic Collection."""
 
         __collection__ = "edge"
+        __indexes__ = [
+            {"fields": [("_id", ASCENDING), ("name", ASCENDING), ("root", ASCENDING)]}
+        ]
 
         @classmethod
         def __document__(cls, doc: Mapping[str, Any]) -> "EdgeArchitype":

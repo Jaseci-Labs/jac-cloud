@@ -37,11 +37,11 @@ class User(UserCommon):
     password: bytes
     root_id: str
 
-    class Collection(UserCollection):
+    class Collection(UserCollection["User"]):
         """UserCollection Integration."""
 
         @classmethod
-        def __document__(cls, doc: Union[Mapping[str, Any], dict[str, Any]]) -> "User":
+        def __document__(cls, doc: Union[Mapping[str, Any]]) -> "User":
             """
             Return parsed User from document.
 
