@@ -2,6 +2,7 @@
 import:py from jaclang_jaseci, FastAPI, start;
 import:py from jaclang_jaseci.types, File, Files, OptFile, OptFiles, Defaults;
 import:py from jaclang_jaseci.models, User as BaseUser;
+import:py from jaclang_jaseci.plugins, specs;
 
 # if possible to support this native class declaration
 ::py::
@@ -34,6 +35,7 @@ node someone {
     has val: list = [];
 }
 
+@specs(path = "will-be-ignored-because-of-inner-class-Specs")
 walker create_sample_graph {
     async can enter with `root entry {
         b = boy(val1="a", val2="b");
@@ -43,8 +45,11 @@ walker create_sample_graph {
         await root.save();
         return True;
     }
+
+    obj Specs {}
 }
 
+@specs
 walker visit_sample_graph {
     async can enter1 with `root entry {
         report root;
@@ -87,6 +92,8 @@ walker update_sample_graph {
 
         report (await [-->])[0];
     }
+
+    obj Specs {}
 }
 
 walker update_inner_field_sample_graph {
@@ -102,12 +109,17 @@ walker update_inner_field_sample_graph {
         await here.save();
         report here;
     }
+
+    obj Specs {}
 }
 
+@specs
 walker post_no_body {}
 
 walker post_with_body {
     has a: str;
+
+    obj Specs {}
 }
 
 walker get_no_body {
@@ -174,12 +186,16 @@ walker post_with_file {
         print(self.singleOptional);
         print(self.multipleOptional);
     }
+
+    obj Specs {}
 }
 
 walker post_with_body_and_file {
     has val: int;
     has single: File;
     has multiple: Files;
+
+    obj Specs {}
 }
 
 with entry:__main__ {

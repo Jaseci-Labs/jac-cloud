@@ -9,7 +9,6 @@ from jaclang.plugin.feature import JacFeature as Jac
 
 from .common import (
     ArchCollection,
-    DocAnchor,
     EdgeArchitype,
     GenericEdge,
     JCLASS,
@@ -17,6 +16,7 @@ from .common import (
     JType,
     JacContext,
     NodeArchitype,
+    async_filter,
 )
 
 
@@ -128,29 +128,27 @@ class JacPlugin:
         right = [right] if isinstance(right, NodeArchitype) else right
 
         jctx: JacContext = JCONTEXT.get()
-        await jctx.populate([edge for node in left for edge in node._jac_.edges])
+        await jctx.populate_edges([edge for node in left for edge in node._jac_.edges])
 
         for i in left:
-            edge_list = [
-                await el.connect() if isinstance(el, DocAnchor) else el
-                for el in i._jac_.edges
-            ]
-            edge_list = filter_func(edge_list) if filter_func else edge_list
-            for e in edge_list:
-                if (
-                    dir in ["OUT", "ANY"]  # TODO: Not ideal
-                    and i._jac_.obj == e._jac_.source
-                    and e._jac_.target in right
-                ):
-                    await e.destroy()
-                    disconnect_occurred = True
-                if (
-                    dir in ["IN", "ANY"]
-                    and i._jac_.obj == e._jac_.target
-                    and e._jac_.source in right
-                ):
-                    await e.destroy()
-                    disconnect_occurred = True
+            async for e, s, t in async_filter(i._jac_.edges):
+                if not filter_func or filter_func([e]):
+                    if (
+                        dir in [EdgeDir.OUT, EdgeDir.ANY]
+                        and i == s
+                        and t in right
+                        and s.is_allowed(t)
+                    ):
+                        await e.destroy()
+                        disconnect_occurred = True
+                    if (
+                        dir in [EdgeDir.IN, EdgeDir.ANY]
+                        and i == t
+                        and s in right
+                        and t.is_allowed(s)
+                    ):
+                        await e.destroy()
+                        disconnect_occurred = True
         return disconnect_occurred
 
 
