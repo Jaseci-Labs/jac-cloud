@@ -137,7 +137,7 @@ class JacPlugin:
                         dir in [EdgeDir.OUT, EdgeDir.ANY]
                         and i == s
                         and t in right
-                        and s.is_allowed(t)
+                        and await s.is_allowed(t, jctx)
                     ):
                         await e.destroy()
                         disconnect_occurred = True
@@ -145,7 +145,7 @@ class JacPlugin:
                         dir in [EdgeDir.IN, EdgeDir.ANY]
                         and i == t
                         and s in right
-                        and t.is_allowed(s)
+                        and await t.is_allowed(s, jctx)
                     ):
                         await e.destroy()
                         disconnect_occurred = True

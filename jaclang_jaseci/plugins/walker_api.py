@@ -19,10 +19,11 @@ from jaclang.core.construct import (
 from jaclang.plugin.default import hookimpl
 from jaclang.plugin.feature import JacFeature as Jac
 
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, Field as pyField, create_model
 
 from .common import JCONTEXT, JacContext
 from ..securities import authenticator
+from ..utils import make_optional
 
 
 T = TypeVar("T")
@@ -179,15 +180,14 @@ def get_specs(cls: type) -> Optional[Type[DefaultSpecs]]:
 
 def gen_model_field(cls: type, field: Field, is_file: bool = False) -> tuple[type, Any]:
     """Generate Specs for Model Field."""
-    consts = [cls]
     if not isinstance(field.default, _MISSING_TYPE):
-        consts.append(field.default)
+        consts = (make_optional(cls), pyField(default=field.default))
     elif callable(field.default_factory):
-        consts.append(field.default_factory())
+        consts = (make_optional(cls), pyField(default_factory=field.default_factory))
     else:
-        consts.append(File(...) if is_file else ...)
+        consts = (cls, File(...) if is_file else ...)
 
-    return tuple(consts)  # type: ignore[return-value]
+    return consts
 
 
 def populate_apis(cls: type) -> None:

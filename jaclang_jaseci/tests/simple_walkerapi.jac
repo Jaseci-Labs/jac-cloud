@@ -2,7 +2,7 @@
 import:py from jaclang_jaseci, FastAPI, start;
 import:py from jaclang_jaseci.types, File, Files, OptFile, OptFiles, Defaults;
 import:py from jaclang_jaseci.models, User as BaseUser;
-import:py from jaclang_jaseci.plugins, specs;
+import:py from jaclang_jaseci.plugins, specs, DocAnchor;
 
 # if possible to support this native class declaration
 ::py::
@@ -96,17 +96,81 @@ walker update_sample_graph {
     obj Specs {}
 }
 
-walker update_inner_field_sample_graph {
+walker create_list_field {
     async can enter1 with `root entry {
         a = someone();
         root ++> a;
         await root.save();
         report a;
     }
+    obj Specs {}
+}
 
+walker update_list_field {
     async can enter2 with someone entry {
         here.val.append(1);
         await here.save();
+        report here;
+
+        visit await [-->];
+    }
+
+    obj Specs {}
+}
+
+walker get_list_field {
+    async can enter2 with someone entry {
+        report here;
+        report await [-->];
+    }
+
+    obj Specs {}
+}
+
+walker allow_other {
+    has root_id: str = None, node_id: str = None, write: bool = False;
+
+    async can enter2 with someone entry {
+        if self.root_id {
+            here.allow_root(DocAnchor.ref(self.root_id), self.write);
+        }
+        if self.node_id {
+            here.allow_node(DocAnchor.ref(self.node_id), self.write);
+        }
+        await here.save();
+        report here;
+    }
+
+    obj Specs {}
+}
+
+walker disallow_other {
+    has root_id: str = None, node_id: str = None;
+
+    async can enter2 with someone entry {
+        if self.root_id {
+            here.disallow_root(DocAnchor.ref(self.root_id));
+        }
+        if self.node_id {
+            here.disallow_node(DocAnchor.ref(self.node_id));
+        }
+
+        await here.save();
+        report here;
+    }
+
+    obj Specs {}
+}
+
+walker connect_other_node {
+    has node_id: str = None;
+
+    async can enter2 with someone entry {
+        if self.node_id {
+            other_node = await DocAnchor.ref(self.node_id).connect(here);
+            here ++> other_node;
+            await here.save();
+        }
         report here;
     }
 

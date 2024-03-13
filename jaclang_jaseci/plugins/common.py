@@ -21,6 +21,7 @@ from typing import (
 from bson import ObjectId
 
 from fastapi import Request
+from fastapi.exceptions import HTTPException
 
 from jaclang.core.construct import (
     EdgeAnchor as _EdgeAnchor,
@@ -29,7 +30,6 @@ from jaclang.core.construct import (
     NodeAnchor as _NodeAnchor,
     NodeArchitype as _NodeArchitype,
     Root as _Root,
-    root as base_root,
 )
 
 from motor.motor_asyncio import AsyncIOMotorClientSession
@@ -93,13 +93,34 @@ class ArchCollection(BaseCollection[T]):
 class DocAccess:
     """DocAnchor for Access Handler."""
 
-    all: bool = False
-    nodes: set[ObjectId] = field(default_factory=set)
-    roots: set[ObjectId] = field(default_factory=set)
+    all: int = 0
+    nodes: tuple[set[ObjectId], set[ObjectId]] = field(
+        default_factory=lambda: (set(), set())
+    )
+    roots: tuple[set[ObjectId], set[ObjectId]] = field(
+        default_factory=lambda: (set(), set())
+    )
+
+    @staticmethod
+    def from_json(access: dict[str, Any]) -> "DocAccess":
+        """Convert dict to DocAccess."""
+        all = bool(access.get("all"))
+        nodes = cast(list[list[ObjectId]], access.get("nodes") or [[], []])
+        roots = cast(list[list[ObjectId]], access.get("roots") or [[], []])
+
+        return DocAccess(
+            all,
+            (set(nodes[0]), set(nodes[1])),
+            (set(roots[0]), set(roots[1])),
+        )
 
     def json(self) -> dict:
         """Return in dictionary type."""
-        return {"all": self.all, "nodes": list(self.nodes), "roots": list(self.roots)}
+        return {
+            "all": self.all,
+            "nodes": [list(self.nodes[0]), list(self.nodes[1])],
+            "roots": [list(self.roots[0]), list(self.roots[1])],
+        }
 
 
 @dataclass
@@ -117,6 +138,7 @@ class DocAnchor(Generic[DA]):
     hashes: dict[str, int] = field(default_factory=dict)
     rollback_changes: dict[str, dict[str, Any]] = field(default_factory=dict)
     rollback_hashes: dict[str, int] = field(default_factory=dict)
+    current_access_level: Optional[int] = None
 
     @property
     def ref_id(self) -> str:
@@ -176,41 +198,46 @@ class DocAnchor(Generic[DA]):
         """Push update that there's edge that has been removed."""
         self._pull("edge", doc_anc)
 
-    def allow_node(self, node_id: ObjectId) -> None:
+    def allow_node(self, node_id: ObjectId, write: bool = False) -> None:
         """Allow target node to access current Architype."""
-        if node_id not in self.access.nodes:
-            self.access.nodes.add(node_id)
-            self._add_to_set("access.nodes", node_id)
+        w = 1 if write else 0
+        if node_id not in (nodes := self.access.nodes[w]):
+            nodes.add(node_id)
+            self._add_to_set(f"access.nodes.{w}", node_id)
 
     def disallow_node(self, node_id: ObjectId) -> None:
         """Remove target node access from current Architype."""
-        if node_id in self.access.nodes:
-            self.access.nodes.remove(node_id)
-            self._pull("access.nodes", node_id)
+        for w in range(0, 2):
+            if node_id in (nodes := self.access.nodes[w]):
+                nodes.remove(node_id)
+                self._pull(f"access.nodes.{w}", node_id)
 
-    def allow_root(self, root_id: ObjectId) -> None:
+    def allow_root(self, root_id: ObjectId, write: bool = False) -> None:
         """Allow all access from target root graph to current Architype."""
-        if root_id not in self.access.roots:
-            self.access.roots.add(root_id)
-            self._add_to_set("access.roots", root_id)
+        w = 1 if write else 0
+        if root_id not in (roots := self.access.roots[w]):
+            roots.add(root_id)
+            self._add_to_set(f"access.roots.{w}", root_id)
 
     def disallow_root(self, root_id: ObjectId) -> None:
         """Disallow all access from target root graph to current Architype."""
-        if root_id in self.access.roots:
-            self.access.roots.remove(root_id)
-            self._pull("access.roots", root_id)
+        for w in range(0, 2):
+            if root_id in (roots := self.access.roots[w]):
+                roots.remove(root_id)
+                self._pull(f"access.roots.{w}", root_id)
 
-    def unrestrict(self) -> None:
+    def unrestrict(self, write: bool = False) -> None:
         """Allow everyone to access current Architype."""
-        if not self.access.all:
-            self.access.all = True
-            self._set.update({"access.all": True})
+        w = 2 if write else 1
+        if w > self.access.all:
+            self.access.all = w
+            self._set.update({"access.all": w})
 
     def restrict(self) -> None:
         """Disallow others to access current Architype."""
         if self.access.all:
-            self.access.all = False
-            self._set.update({"access.all": False})
+            self.access.all = 0
+            self._set.update({"access.all": 0})
 
     def class_ref(self) -> Type[DA]:
         """Return generated class equivalent for DocAnchor."""
@@ -272,7 +299,7 @@ class DocAnchor(Generic[DA]):
             )
         return None
 
-    async def connect(self) -> Optional[DA]:
+    async def connect(self, node: Optional["NodeArchitype"] = None) -> Optional[DA]:
         """Retrieve the Architype from db and return."""
         jctx: JacContext = JCONTEXT.get()
 
@@ -285,6 +312,7 @@ class DocAnchor(Generic[DA]):
             cls
             and (data := await cls.Collection.find_by_id(self.id))
             and isinstance(data, (NodeArchitype, EdgeArchitype))
+            and (jctx.root.is_allowed(data) or (node and node.is_allowed(data)))
         ):
             self.arch = data
             jctx.set(data._jac_doc_.id, data)
@@ -372,9 +400,10 @@ class DocArchitype(Generic[DA]):
                 if _set := op[ops[1]]:
                     _list = op[ops[1]] = list(_set)
                     for idx, danch in enumerate(_list):
-                        if not danch.connected:
-                            await danch.arch.save(session)
-                        _list[idx] = danch.ref_id
+                        if isinstance(danch, DocAnchor):
+                            if not danch.connected and danch.arch:
+                                await danch.arch.save(session)
+                            _list[idx] = danch.ref_id
             if _list:
                 _ops.append(({"_id": jd_id}, {ops[0]: target}))
 
@@ -422,17 +451,43 @@ class DocArchitype(Generic[DA]):
                     logger.exception(f"Error destroying {self._jac_type_.name}!")
                     raise
 
-    def is_allowed(self, to: DA) -> bool:
+    async def is_allowed(self, to: DA, jctx: Optional["JacContext"] = None) -> bool:
         """Access validation."""
-        from_jd = self._jac_doc_
-        to_jd = to._jac_doc_
+        if not jctx:
+            jctx = JCONTEXT.get()
+        if (
+            not jctx
+            or not (from_jd := self._jac_doc_).connected
+            or not (to_jd := to._jac_doc_).connected
+            or not (from_root := from_jd.root)
+            or not (to_root := to_jd.root)
+        ):
+            return False
 
-        return (
-            (root := from_jd.root) == to_jd.root
-            or (access := to_jd.access).all
-            or from_jd.id in access.nodes
-            or root in access.roots
-        )
+        if (isinstance(self, Root) and from_jd.id == to_root) or from_root == to_root:
+            to_jd.current_access_level = 1
+            return True
+
+        if (to_access := to_jd.access).all:
+            to_jd.current_access_level = to_access.all - 1
+            return True
+
+        for i in range(1, -1, -1):
+            if from_jd.id in to_access.nodes[i] or from_root in to_access.roots[i]:
+                to_jd.current_access_level = i
+                return True
+
+        if isinstance(
+            to_root_access := await jctx.check_root_access(to_root),
+            DocAccess,
+        ) and (cur_root_id := jctx.get_root_id()):
+            for i in range(1, -1, -1):
+                if cur_root_id in to_root_access.roots[i]:
+                    to_jd.current_access_level = i
+                    return True
+
+        to_jd.current_access_level = None
+        return False
 
     def __eq__(self, other: object) -> bool:
         """Override equal implementation."""
@@ -472,18 +527,13 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
         @classmethod
         def __document__(cls, doc: Mapping[str, Any]) -> "NodeArchitype":
             """Return parsed NodeArchitype from document."""
-            access = cast(dict, doc.get("access"))
             return cls.build_node(
                 DocAnchor[NodeArchitype](
                     type=JType.node,
                     name=cast(str, doc.get("name")),
                     id=cast(ObjectId, doc.get("_id")),
                     root=cast(ObjectId, doc.get("root")),
-                    access=DocAccess(
-                        all=cast(bool, access.get("all")),
-                        nodes=set(cast(list, access.get("nodes"))),
-                        roots=set(cast(list, access.get("roots"))),
-                    ),
+                    access=DocAccess.from_json(cast(dict, doc.get("access"))),
                     connected=True,
                     hashes={
                         key: hash(dumps(val))
@@ -501,25 +551,39 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
         """Update DocAnchor that there's edge that has been removed."""
         self._jac_doc_.disconnect_edge(edge._jac_doc_)
 
-    def allow_node(self, node_id: ObjectId) -> None:
+    def allow_node(
+        self, node: Union[DocAnchor, "NodeArchitype"], write: bool = False
+    ) -> None:
         """Allow target node to access current Architype."""
-        self._jac_doc_.allow_node(node_id)
+        if isinstance(node, DocAnchor):
+            self._jac_doc_.allow_node(node.id, write)
+        elif isinstance(node, NodeArchitype):
+            self._jac_doc_.allow_node(node._jac_doc_.id, write)
 
-    def disallow_node(self, node_id: ObjectId) -> None:
+    def disallow_node(self, node: Union[DocAnchor, "NodeArchitype"]) -> None:
         """Remove target node access from current Architype."""
-        self._jac_doc_.disallow_node(node_id)
+        if isinstance(node, DocAnchor):
+            self._jac_doc_.disallow_node(node.id)
+        elif isinstance(node, NodeArchitype):
+            self._jac_doc_.disallow_node(node._jac_doc_.id)
 
-    def allow_root(self, root_id: ObjectId) -> None:
+    def allow_root(self, root: Union[DocAnchor, "Root"], write: bool = False) -> None:
         """Allow all access from target root graph to current Architype."""
-        self._jac_doc_.allow_root(root_id)
+        if isinstance(root, DocAnchor):
+            self._jac_doc_.allow_root(root.id, write)
+        elif isinstance(root, Root):
+            self._jac_doc_.allow_root(root._jac_doc_.id, write)
 
-    def disallow_root(self, root_id: ObjectId) -> None:
+    def disallow_root(self, root: Union[DocAnchor, "Root"]) -> None:
         """Disallow all access from target root graph to current Architype."""
-        self._jac_doc_.disallow_root(root_id)
+        if isinstance(root, DocAnchor):
+            self._jac_doc_.disallow_root(root.id)
+        elif isinstance(root, Root):
+            self._jac_doc_.disallow_root(root._jac_doc_.id)
 
-    def unrestrict(self) -> None:
+    def unrestrict(self, write: bool = False) -> None:
         """Allow everyone to access current Architype."""
-        self._jac_doc_.unrestrict()
+        self._jac_doc_.unrestrict(write)
 
     def restrict(self) -> None:
         """Disallow others to access current Architype."""
@@ -541,7 +605,7 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
     ) -> None:
         """Destroy NodeArchitype."""
         if session:
-            if (jd := self._jac_doc_).connected:
+            if (jd := self._jac_doc_).connected and jd.current_access_level == 1:
                 await self.destroy_edges(session)
                 await self.Collection.delete_by_id(jd.id, session)
                 jd.connected = False
@@ -572,7 +636,7 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
                 except Exception:
                     jd.connected = False
                     raise
-            elif changes := jd.pull_changes():
+            elif jd.current_access_level == 1 and (changes := jd.pull_changes()):
                 try:
                     await self.Collection.bulk_write(
                         await self.propagate_save(changes, session),
@@ -613,14 +677,14 @@ class NodeAnchor(_NodeAnchor):
                     dir in [EdgeDir.OUT, EdgeDir.ANY]
                     and self.obj == s
                     and (not target_obj or t.__class__ in target_obj)
-                    and s.is_allowed(t)
+                    and await s.is_allowed(t, jctx)
                 ):
                     ret_edges.append(e)
                 if (
                     dir in [EdgeDir.IN, EdgeDir.ANY]
                     and self.obj == t
                     and (not target_obj or s.__class__ in target_obj)
-                    and t.is_allowed(s)
+                    and await t.is_allowed(s, jctx)
                 ):
                     ret_edges.append(e)
 
@@ -643,14 +707,14 @@ class NodeAnchor(_NodeAnchor):
                     dir in [EdgeDir.OUT, EdgeDir.ANY]
                     and self.obj == s
                     and (not target_obj or t.__class__ in target_obj)
-                    and s.is_allowed(t)
+                    and await s.is_allowed(t, jctx)
                 ):
                     ret_nodes.append(t)
                 if (
                     dir in [EdgeDir.IN, EdgeDir.ANY]
                     and self.obj == t
                     and (not target_obj or s.__class__ in target_obj)
-                    and t.is_allowed(s)
+                    and await t.is_allowed(s, jctx)
                 ):
                     ret_nodes.append(s)
 
@@ -695,17 +759,12 @@ class Root(NodeArchitype, _Root):
         @classmethod
         def __document__(cls, doc: Mapping[str, Any]) -> "Root":
             """Return parsed NodeArchitype from document."""
-            access = cast(dict, doc.get("access"))
             return cls.build_node(
                 DocAnchor[Root](
                     type=JType.node,
                     id=cast(ObjectId, doc.get("_id")),
                     root=cast(ObjectId, doc.get("root")),
-                    access=DocAccess(
-                        all=cast(bool, access.get("all")),
-                        nodes=set(cast(list, access.get("nodes"))),
-                        roots=set(cast(list, access.get("roots"))),
-                    ),
+                    access=DocAccess.from_json(cast(dict, doc.get("access"))),
                     connected=True,
                     hashes={
                         key: hash(dumps(val))
@@ -740,18 +799,13 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
         @classmethod
         def __document__(cls, doc: Mapping[str, Any]) -> "EdgeArchitype":
             """Return parsed EdgeArchitype from document."""
-            access = cast(dict, doc.get("access"))
             return cls.build_edge(
                 DocAnchor[EdgeArchitype](
                     type=JType.edge,
                     name=cast(str, doc.get("name")),
                     id=cast(ObjectId, doc.get("_id")),
                     root=cast(ObjectId, doc.get("root")),
-                    access=DocAccess(
-                        all=cast(bool, access.get("all")),
-                        nodes=set(cast(list, access.get("nodes"))),
-                        roots=set(cast(list, access.get("roots"))),
-                    ),
+                    access=DocAccess.from_json(cast(dict, doc.get("access"))),
                     connected=True,
                     hashes={
                         key: hash(dumps(val))
@@ -767,7 +821,7 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
         """Destroy EdgeArchitype."""
         if session:
             ea = self._jac_
-            if (jd := self._jac_doc_).connected:
+            if (jd := self._jac_doc_).connected and jd.current_access_level == 1:
                 try:
                     await ea.detach()
                     await ea.source.save(session)  # type: ignore[union-attr]
@@ -805,7 +859,7 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
                 except Exception:
                     jd.connected = False
                     raise
-            elif changes := jd.pull_changes():
+            elif jd.current_access_level == 1 and (changes := jd.pull_changes()):
                 try:
                     await self.Collection.update_by_id(
                         jd.id,
@@ -898,17 +952,12 @@ class GenericEdge(EdgeArchitype):
         @classmethod
         def __document__(cls, doc: Mapping[str, Any]) -> "GenericEdge":
             """Return parsed EdgeArchitype from document."""
-            access = cast(dict, doc.get("access"))
             return cls.build_edge(
                 DocAnchor[GenericEdge](
                     type=JType.edge,
                     id=cast(ObjectId, doc.get("_id")),
                     root=cast(ObjectId, doc.get("root")),
-                    access=DocAccess(
-                        all=cast(bool, access.get("all")),
-                        nodes=set(cast(list, access.get("nodes"))),
-                        roots=set(cast(list, access.get("roots"))),
-                    ),
+                    access=DocAccess.from_json(cast(dict, doc.get("access"))),
                     connected=True,
                     hashes={
                         key: hash(dumps(val))
@@ -927,7 +976,7 @@ class JacContext:
         self.__mem__: dict[ObjectId, Union[NodeArchitype, EdgeArchitype]] = {}
         self.request = request
         self.user = getattr(request, "auth_user", None)
-        self.root: Root = getattr(request, "auth_root", base_root)
+        self.root: Root = cast(Root, getattr(request, "auth_root", base_root))
         self.reports: list[Any] = []
         self.entry = entry
 
@@ -945,16 +994,33 @@ class JacContext:
                     Union[NodeArchitype, EdgeArchitype],
                     JCLASS[match.group(1)][match.group(2)],
                 ).Collection.find_by_id(ObjectId(match.group(3)))
-                if isinstance(entry, NodeArchitype):
+                if isinstance(entry, NodeArchitype) and await self.root.is_allowed(
+                    entry
+                ):
                     self.entry = entry
                 else:
-                    self.entry = self.root
+                    raise HTTPException(status_code=403)
             else:
                 self.entry = self.root
         elif self.entry is None:
             self.entry = self.root
 
         return self.entry
+
+    async def check_root_access(
+        self, root_id: Optional[ObjectId] = None
+    ) -> Optional[DocAccess]:
+        """Retrieve current root or specified root."""
+        if root_id:
+            if (obj := self.get(root_id)) and isinstance(obj, Root):
+                return obj._jac_doc_.access
+
+            if isinstance(root := await Root.Collection.find_by_id(root_id), Root):
+                self.set(root._jac_doc_.id, root)
+                return root._jac_doc_.access
+        elif isinstance(self.root, Root):
+            return self.root._jac_doc_.access
+        return None
 
     async def populate_edges(
         self, danchors: list[Union[EdgeArchitype, DocAnchor[EdgeArchitype]]]
@@ -1094,3 +1160,15 @@ Root.__name__ = ""
 GenericEdge.__name__ = ""
 
 JCLASS: dict[str, dict[str, type]] = {"n": {"": Root}, "e": {"": GenericEdge}}
+
+base_root_id = ObjectId("000000000000000000000000")
+base_root = Root.Collection.build_node(
+    DocAnchor[Root](
+        type=JType.node,
+        id=base_root_id,
+        root=base_root_id,
+        access=DocAccess(),
+        connected=True,
+    ),
+    {"context": {}, "edge": []},
+)

@@ -61,7 +61,8 @@ async def authenticate(request: Request) -> None:
             and await TokenMemory.hget(key=token)
         ):
             user = cast(User, await User.model().Collection.find_by_id(decrypted["id"]))
-            root = await Root.Collection.find_by_id(user.root_id)
+            root = cast(Root, await Root.Collection.find_by_id(user.root_id))
+            root._jac_doc_.current_access_level = 1
             request.auth_user = user  # type: ignore[attr-defined]
             request.auth_root = root  # type: ignore[attr-defined]
             return
