@@ -28,6 +28,7 @@ setup(
         "types-redis==4.6.0.20240218",
         "python-multipart==0.0.9",
         "httpx==0.27.0",
+        "sendgrid==6.11.0",
     ],
     package_data={},
     entry_points={

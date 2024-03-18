@@ -5,6 +5,7 @@ from random import choice
 from string import ascii_letters, digits
 from typing import Any, Optional, cast
 
+from bson import ObjectId
 
 from fastapi import Depends, Request
 from fastapi.exceptions import HTTPException
@@ -14,10 +15,10 @@ from jwt import decode, encode
 
 from passlib.context import CryptContext
 
-from ..memory import TokenMemory
+from ..memory import CodeMemory, TokenMemory
 from ..models import User
 from ..plugins import Root
-from ..utils import logger, utc_now
+from ..utils import logger, utc_timestamp
 
 
 TOKEN_SECRET = getenv(
@@ -40,9 +41,36 @@ def decrypt(token: str) -> Optional[dict]:
         return None
 
 
+async def create_code(user_id: ObjectId) -> str:
+    """Generate Verification Code."""
+    verification = encrypt(
+        {
+            "user_id": str(user_id),
+            "expiration": utc_timestamp(
+                hours=int(getenv("VERIFICATION_TIMEOUT") or "24")
+            ),
+        }
+    )
+    if await CodeMemory.hset(key=verification, data=True):
+        return verification
+    raise HTTPException(500, "Verification Creation Failed!")
+
+
+async def verify_code(code: str) -> Optional[str]:
+    """Verify Code."""
+    decrypted = decrypt(code)
+    if (
+        decrypted
+        and decrypted["expiration"] > utc_timestamp()
+        and await CodeMemory.hget(key=code)
+    ):
+        return decrypted["user_id"]
+    return None
+
+
 async def create_token(user: dict[str, Any]) -> str:
     """Generate token for current user."""
-    user["expiration"] = utc_now(hours=int(getenv("TOKEN_TIMEOUT") or "12"))
+    user["expiration"] = utc_timestamp(hours=int(getenv("TOKEN_TIMEOUT") or "12"))
     token = encrypt(user)
     if await TokenMemory.hset(key=token, data=True):
         return token
@@ -57,7 +85,7 @@ async def authenticate(request: Request) -> None:
         decrypted = decrypt(token)
         if (
             decrypted
-            and decrypted["expiration"] > utc_now()
+            and decrypted["expiration"] > utc_timestamp()
             and await TokenMemory.hget(key=token)
         ):
             user = cast(User, await User.model().Collection.find_by_id(decrypted["id"]))
@@ -70,5 +98,5 @@ async def authenticate(request: Request) -> None:
     raise HTTPException(status_code=401)
 
 
-verify = CryptContext(schemes=["bcrypt"], deprecated="auto").verify
+verify_pass = CryptContext(schemes=["bcrypt"], deprecated="auto").verify
 authenticator = [Depends(HTTPBearer()), Depends(authenticate)]

@@ -5,10 +5,17 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Union, cast, get_args, get_origin
 
+from .mail import Emailer, SendGridEmailer
 
-def utc_now(**addons: int) -> int:
+
+def utc_datetime(**addons: int) -> datetime:
+    """Get current datetime with option to add additional timedelta."""
+    return datetime.now(tz=timezone.utc) + timedelta(**addons)
+
+
+def utc_timestamp(**addons: int) -> int:
     """Get current timestamp with option to add additional timedelta."""
-    return int((datetime.now(tz=timezone.utc) + timedelta(**addons)).timestamp())
+    return int(utc_datetime(**addons).timestamp())
 
 
 def make_optional(cls: type) -> type:
@@ -24,6 +31,9 @@ logger.addHandler(logging.StreamHandler(sys.stdout))
 # logging.getLogger('passlib').setLevel(logging.ERROR)
 
 __all__ = [
-    "utc_now",
+    "Emailer",
+    "SendGridEmailer",
+    "utc_datetime",
+    "utc_timestamp",
     "logger",
 ]

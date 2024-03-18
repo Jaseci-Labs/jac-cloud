@@ -8,3 +8,9 @@ class UserRequest(BaseModel):
 
     email: EmailStr
     password: str
+
+
+class UserVerification(BaseModel):
+    """User Verification Request Model."""
+
+    code: str

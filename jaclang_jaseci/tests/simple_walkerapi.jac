@@ -3,6 +3,7 @@ import:py from jaclang_jaseci, FastAPI, start;
 import:py from jaclang_jaseci.types, File, Files, OptFile, OptFiles, Defaults;
 import:py from jaclang_jaseci.models, User as BaseUser;
 import:py from jaclang_jaseci.plugins, specs, DocAnchor;
+import:py from jaclang_jaseci.utils, SendGridEmailer;
 
 # if possible to support this native class declaration
 ::py::
@@ -21,6 +22,12 @@ class User(BaseUser):
                 root_id=str(doc.pop("root_id")),
                 **doc,
             )
+
+    @staticmethod
+    def send_verification_code(code: str, email: str) -> None:
+        """Send verification code."""
+        SendGridEmailer.send_verification_code(code, email)
+
 ::py::
 
 node boy {
@@ -263,6 +270,7 @@ walker post_with_body_and_file {
 }
 
 with entry:__main__ {
+    # SendGridEmailer.start();
     start(
         host="0.0.0.0",
         port=8000
