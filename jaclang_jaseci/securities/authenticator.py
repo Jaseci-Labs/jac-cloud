@@ -1,8 +1,6 @@
 """Walker API Authenticator."""
 
 from os import getenv
-from random import choice
-from string import ascii_letters, digits
 from typing import Any, Optional, cast
 
 from bson import ObjectId
@@ -18,12 +16,10 @@ from passlib.context import CryptContext
 from ..memory import CodeMemory, TokenMemory
 from ..models import User
 from ..plugins import Root
-from ..utils import logger, utc_timestamp
+from ..utils import logger, random_string, utc_timestamp
 
 
-TOKEN_SECRET = getenv(
-    "TOKEN_SECRET", "".join(choice(ascii_letters + digits) for _ in range(50))
-)
+TOKEN_SECRET = getenv("TOKEN_SECRET", random_string(50))
 TOKEN_ALGORITHM = getenv("TOKEN_ALGORITHM", "HS256")
 
 
@@ -71,6 +67,7 @@ async def verify_code(code: str) -> Optional[str]:
 async def create_token(user: dict[str, Any]) -> str:
     """Generate token for current user."""
     user["expiration"] = utc_timestamp(hours=int(getenv("TOKEN_TIMEOUT") or "12"))
+    user["state"] = random_string(8)
     token = encrypt(user)
     if await TokenMemory.hset(key=token, data=True):
         return token

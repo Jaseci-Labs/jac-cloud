@@ -1,6 +1,6 @@
 """Example of simple walker walking nodes."""
 import:py from jaclang_jaseci, FastAPI, start;
-import:py from jaclang_jaseci.types, File, Files, OptFile, OptFiles, Defaults;
+import:py from jaclang_jaseci.types, File, Files, OptFile, OptFiles;
 import:py from jaclang_jaseci.models, User as BaseUser;
 import:py from jaclang_jaseci.plugins, specs, DocAnchor;
 import:py from jaclang_jaseci.utils, SendGridEmailer;
