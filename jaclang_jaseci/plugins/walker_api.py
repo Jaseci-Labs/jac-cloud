@@ -1,7 +1,6 @@
 """Walker API Plugin."""
 
 from dataclasses import Field, _MISSING_TYPE, dataclass, is_dataclass
-from inspect import iscoroutine
 from pydoc import locate
 from re import compile
 from typing import Any, Callable, Optional, Type, TypeVar, Union, cast
@@ -55,13 +54,7 @@ class DefaultSpecs:
 class WalkerAnchor(_WalkerAnchor):
     """Overriden WalkerAnchor."""
 
-    async def await_if_coroutine(self, ret: Any) -> Any:  # noqa: ANN401
-        """Await return if it's a coroutine."""
-        if iscoroutine(ret):
-            ret = await ret
-        return ret
-
-    async def spawn_call(self, nd: Architype) -> "WalkerArchitype":
+    def spawn_call(self, nd: Architype) -> "WalkerArchitype":
         """Invoke data spatial call."""
         self.path: list = []
         self.next = [nd]
@@ -72,9 +65,7 @@ class WalkerAnchor(_WalkerAnchor):
             for i in nd._jac_entry_funcs_:
                 if not i.trigger or isinstance(self.obj, i.trigger):
                     if i.func:
-                        self.returns.append(
-                            await self.await_if_coroutine(i.func(nd, self.obj))
-                        )
+                        self.returns.append(i.func(nd, self.obj))
                     else:
                         raise ValueError(f"No function {i.name} to call.")
                 if self.disengaged:
@@ -82,9 +73,7 @@ class WalkerAnchor(_WalkerAnchor):
             for i in self.obj._jac_entry_funcs_:
                 if not i.trigger or isinstance(nd, i.trigger):
                     if i.func:
-                        self.returns.append(
-                            await self.await_if_coroutine(i.func(self.obj, nd))
-                        )
+                        self.returns.append(i.func(self.obj, nd))
                     else:
                         raise ValueError(f"No function {i.name} to call.")
                 if self.disengaged:
@@ -92,9 +81,7 @@ class WalkerAnchor(_WalkerAnchor):
             for i in self.obj._jac_exit_funcs_:
                 if not i.trigger or isinstance(nd, i.trigger):
                     if i.func:
-                        self.returns.append(
-                            await self.await_if_coroutine(i.func(self.obj, nd))
-                        )
+                        self.returns.append(i.func(self.obj, nd))
                     else:
                         raise ValueError(f"No function {i.name} to call.")
                 if self.disengaged:
@@ -102,9 +89,7 @@ class WalkerAnchor(_WalkerAnchor):
             for i in nd._jac_exit_funcs_:
                 if not i.trigger or isinstance(self.obj, i.trigger):
                     if i.func:
-                        self.returns.append(
-                            await self.await_if_coroutine(i.func(nd, self.obj))
-                        )
+                        self.returns.append(i.func(nd, self.obj))
                     else:
                         raise ValueError(f"No function {i.name} to call.")
                 if self.disengaged:
@@ -143,12 +128,12 @@ class JacPlugin:
 
     @staticmethod
     @hookimpl
-    async def spawn_call(op1: Architype, op2: Architype) -> WalkerArchitype:
+    def spawn_call(op1: Architype, op2: Architype) -> WalkerArchitype:
         """Jac's spawn operator feature."""
         if isinstance(op1, WalkerArchitype):
-            return await op1._jac_.spawn_call(op2)
+            return op1._jac_.spawn_call(op2)
         elif isinstance(op2, WalkerArchitype):
-            return await op2._jac_.spawn_call(op1)
+            return op2._jac_.spawn_call(op1)
         else:
             raise TypeError("Invalid walker object")
 
@@ -247,7 +232,7 @@ def populate_apis(cls: type) -> None:
 
         payload_model = create_model(f"{cls.__name__.lower()}_request_model", **payload)  # type: ignore[call-overload]
 
-        async def api_entry(
+        def api_entry(
             request: Request,
             node: Optional[str],
             payload: payload_model = Depends(),  # type: ignore # noqa: B008
@@ -256,7 +241,7 @@ def populate_apis(cls: type) -> None:
             body = pl.get("body", {})
 
             if isinstance(body, BaseUploadFile) and body_model:
-                body = loads(await body.read())
+                body = loads(body.file.read())
                 try:
                     body = body_model(**body).model_dump()
                 except ValidationError as e:
@@ -266,14 +251,14 @@ def populate_apis(cls: type) -> None:
             JCONTEXT.set(jctx)
 
             wlk = cls(**body, **pl["query"], **pl["files"])._jac_
-            await wlk.spawn_call(await jctx.get_entry())
+            wlk.spawn_call(jctx.get_entry())
             return ORJSONResponse(jctx.response(wlk.returns))
 
-        async def api_root(
+        def api_root(
             request: Request,
             payload: payload_model = Depends(),  # type: ignore # noqa: B008
         ) -> Response:
-            return await api_entry(request, None, payload)
+            return api_entry(request, None, payload)
 
         for method in methods:
             method = method.lower()

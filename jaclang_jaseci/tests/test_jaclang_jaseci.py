@@ -4,23 +4,23 @@ from contextlib import suppress
 from json import load
 from os import getenv
 from typing import Union
-from unittest.async_case import IsolatedAsyncioTestCase
+from unittest import TestCase
 
 from httpx import get, post
 
 from ..collections import BaseCollection
 
 
-class JacLangJaseciTests(IsolatedAsyncioTestCase):
+class JacLangJaseciTests(TestCase):
     """JacLang Jaseci Feature Tests."""
 
-    async def asyncSetUp(self) -> None:
+    def setUp(self) -> None:
         """Reset DB and wait for server."""
         self.host = "http://0.0.0.0:8000"
         self.client = BaseCollection.get_client()
         self.users = []
         self.database = getenv("DATABASE_NAME", "jaclang")
-        await self.client.drop_database(self.database)
+        self.client.drop_database(self.database)
         count = 0
         while True:
             if count > 5:
@@ -32,9 +32,9 @@ class JacLangJaseciTests(IsolatedAsyncioTestCase):
                     break
             count += 1
 
-    async def asyncTearDown(self) -> None:
+    def tearDown(self) -> None:
         """Clean up DB."""
-        await self.client.drop_database(self.database)
+        self.client.drop_database(self.database)
 
     def create_test_user(self, suffix: str = "") -> None:
         """Call openapi specs json."""

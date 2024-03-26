@@ -16,7 +16,7 @@ from .common import (
     JType,
     JacContext,
     NodeArchitype,
-    async_filter,
+    generator_filter,
 )
 
 
@@ -59,7 +59,7 @@ class JacPlugin:
 
     @staticmethod
     @hookimpl
-    async def edge_ref(
+    def edge_ref(
         node_obj: NodeArchitype | list[NodeArchitype],
         target_obj: Optional[NodeArchitype | list[NodeArchitype]],
         dir: EdgeDir,
@@ -77,7 +77,7 @@ class JacPlugin:
         if edges_only:
             connected_edges: list[EdgeArchitype] = []
             for node in node_obj:
-                connected_edges += await node._jac_.get_edges(
+                connected_edges += node._jac_.get_edges(
                     dir, filter_func, target_obj=targ_obj_set
                 )
             return list(set(connected_edges))
@@ -85,9 +85,7 @@ class JacPlugin:
             connected_nodes: list[NodeArchitype] = []
             for node in node_obj:
                 connected_nodes.extend(
-                    await node._jac_.edges_to_nodes(
-                        dir, filter_func, target_obj=targ_obj_set
-                    )
+                    node._jac_.edges_to_nodes(dir, filter_func, target_obj=targ_obj_set)
                 )
             return list(set(connected_nodes))
 
@@ -116,7 +114,7 @@ class JacPlugin:
 
     @staticmethod
     @hookimpl
-    async def disconnect(
+    def disconnect(
         left: NodeArchitype | list[NodeArchitype],
         right: NodeArchitype | list[NodeArchitype],
         dir: EdgeDir,
@@ -128,26 +126,26 @@ class JacPlugin:
         right = [right] if isinstance(right, NodeArchitype) else right
 
         jctx: JacContext = JCONTEXT.get()
-        await jctx.populate_edges([edge for node in left for edge in node._jac_.edges])
+        jctx.populate_edges([edge for node in left for edge in node._jac_.edges])
 
         for i in left:
-            async for e, s, t in async_filter(i._jac_.edges):
+            for e, s, t in generator_filter(i._jac_.edges):
                 if not filter_func or filter_func([e]):
                     if (
                         dir in [EdgeDir.OUT, EdgeDir.ANY]
                         and i == s
                         and t in right
-                        and await s.is_allowed(t, jctx)
+                        and s.is_allowed(t, jctx)
                     ):
-                        await e.destroy()
+                        e.destroy()
                         disconnect_occurred = True
                     if (
                         dir in [EdgeDir.IN, EdgeDir.ANY]
                         and i == t
                         and s in right
-                        and await t.is_allowed(s, jctx)
+                        and t.is_allowed(s, jctx)
                     ):
-                        await e.destroy()
+                        e.destroy()
                         disconnect_occurred = True
         return disconnect_occurred
 

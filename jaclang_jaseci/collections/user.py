@@ -20,6 +20,6 @@ class UserCollection(BaseCollection[T]):
     __indexes__: list[dict] = [{"fields": ["email"], "unique": True}]
 
     @classmethod
-    async def find_by_email(cls, email: str) -> Optional[Union[T, Mapping[str, Any]]]:
+    def find_by_email(cls, email: str) -> Optional[Union[T, Mapping[str, Any]]]:
         """Retrieve user via email."""
-        return await cls.find_one(filter={"email": email}, projection={})
+        return cls.find_one(filter={"email": email}, projection={})

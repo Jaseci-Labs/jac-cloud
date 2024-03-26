@@ -6,7 +6,7 @@ pip install -e .
 ```
 ### Dependencies for Devs
 ```bash
-pip install jaclang black pre-commit pytest flake8 flake8_import_order flake8_docstrings flake8_comprehensions flake8_bugbear flake8_annotations pep8_naming flake8_simplify mypy pytest
+pip install black pre-commit pytest flake8 flake8_import_order flake8_docstrings flake8_comprehensions flake8_bugbear flake8_annotations pep8_naming flake8_simplify mypy pytest
 pre-commit install
 ```
 
@@ -336,66 +336,66 @@ node sample {
 ##### `NEW NODE SAVE`
 - if node is newly created and trigger save. It will save the whole object.
 ```python
-async can ability_name ...{your options}... {
+can ability_name ...{your options}... {
     node1 = sample();
-    await node1.save();
+    node1.save();
 }
 ```
 ##### `EXISTING NODE SAVE`
 - if node is already existing and trigger save. It will only save fields that has update. In this case only `context.val` will be updated.
 ```python
-async can ability_name with sample entry {
+can ability_name with sample entry {
     here.val = 2;
-    await node1.save();
+    node1.save();
 }
 ```
 ##### `CONNECTING MULTIPLE NEW NODES WITH SAVE`
 - node save will propagate to all it's adjacent nodes that's not yet existing in DB. This is to make sure that the reference of edges is always existing in database.
 - if you have trigger multiple save, it will only process the save once per node. If node is already updated and for some reason save is triggered again, it will always check if there's changes happened on the node. If it doesn't find any, it will just ignore the save.
 ```python
-async can ability_name1 with `root entry {
+can ability_name1 with `root entry {
     a = sample();
     b = sample();
 
     a ++> b;
-    await a.save(); # this will trigger save for both a and b
+    a.save(); # this will trigger save for both a and b
 
-    await b.save(); # will be ignored.
+    b.save(); # will be ignored.
 }
 
-async can ability_name2 with `root entry {
+can ability_name2 with `root entry {
     a = sample();
     b = sample();
 
     a ++> b;
-    await a.save(); # this will trigger save for both a and b
+    a.save(); # this will trigger save for both a and b
 
     b.val = 4;
-    await b.save(); # will save context.val = 4
+    b.save(); # will save context.val = 4
 }
 ```
 ##### `CONNECTING MULTIPLE NEW OR EXISTING NODES WITH SAVE`
 ```python
-async can ability_name with sample entry {
+can ability_name with sample entry {
     a = sample();
     b = sample();
 
     here ++> a;
     a ++> b;
-    await a.save(); # will only propagate to b and not in here node.
-    await b.save(); # will be ignored. Already saved
+    a.save(); # will only propagate to b and not in here node.
+    b.save(); # will be ignored. Already saved
 
-    await here.save(); # since here node is already existing, it must trigger save manually.
+    here.save(); # since here node is already existing, it must trigger save manually.
 }
 ```
 ##### `DESTROY NODES`
 ```python
-async can ability_name with sample entry {
+can ability_name with sample entry {
     a = sample();
 
-    await a.destroy(); # will be ignored since it's not existing on db
+    a.destroy(); # will be ignored since it's not existing on db
 
-    await here.destroy(); # will delete here node, all edges connected to it and remove adjacent node's reference to this node.
+    here.destroy(); # will delete here node, all edges connected to it and remove adjacent node's reference to this node.
     # in context, it trigger multiple operation
 }
 ```

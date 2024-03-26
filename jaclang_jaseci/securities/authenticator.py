@@ -35,7 +35,7 @@ def decrypt(token: str) -> Optional[dict]:
         return None
 
 
-async def create_code(user_id: ObjectId) -> str:
+def create_code(user_id: ObjectId) -> str:
     """Generate Verification Code."""
     verification = encrypt(
         {
@@ -45,34 +45,34 @@ async def create_code(user_id: ObjectId) -> str:
             ),
         }
     )
-    if await CodeMemory.hset(key=verification, data=True):
+    if CodeMemory.hset(key=verification, data=True):
         return verification
     raise HTTPException(500, "Verification Creation Failed!")
 
 
-async def verify_code(code: str) -> Optional[str]:
+def verify_code(code: str) -> Optional[str]:
     """Verify Code."""
     decrypted = decrypt(code)
     if (
         decrypted
         and decrypted["expiration"] > utc_timestamp()
-        and await CodeMemory.hget(key=code)
+        and CodeMemory.hget(key=code)
     ):
         return decrypted["user_id"]
     return None
 
 
-async def create_token(user: dict[str, Any]) -> str:
+def create_token(user: dict[str, Any]) -> str:
     """Generate token for current user."""
     user["expiration"] = utc_timestamp(hours=int(getenv("TOKEN_TIMEOUT") or "12"))
     user["state"] = random_string(8)
     token = encrypt(user)
-    if await TokenMemory.hset(key=token, data=True):
+    if TokenMemory.hset(key=token, data=True):
         return token
     raise HTTPException(500, "Token Creation Failed!")
 
 
-async def authenticate(request: Request) -> None:
+def authenticate(request: Request) -> None:
     """Authenticate current request and attach authenticated user and their root."""
     authorization = request.headers.get("Authorization")
     if authorization and authorization.lower().startswith("bearer"):
@@ -81,10 +81,10 @@ async def authenticate(request: Request) -> None:
         if (
             decrypted
             and decrypted["expiration"] > utc_timestamp()
-            and await TokenMemory.hget(key=token)
+            and TokenMemory.hget(key=token)
         ):
-            user = cast(User, await User.model().Collection.find_by_id(decrypted["id"]))
-            root = cast(Root, await Root.Collection.find_by_id(user.root_id))
+            user = cast(User, User.model().Collection.find_by_id(decrypted["id"]))
+            root = cast(Root, Root.Collection.find_by_id(user.root_id))
             root._jac_doc_.current_access_level = 1
             request.auth_user = user  # type: ignore[attr-defined]
             request.auth_root = root  # type: ignore[attr-defined]

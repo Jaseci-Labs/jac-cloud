@@ -7,8 +7,8 @@ from enum import Enum
 from re import IGNORECASE, compile
 from typing import (
     Any,
-    AsyncGenerator,
     Callable,
+    Generator,
     Generic,
     Mapping,
     Optional,
@@ -32,11 +32,10 @@ from jaclang.core.construct import (
     Root as _Root,
 )
 
-from motor.motor_asyncio import AsyncIOMotorClientSession
-
 from orjson import dumps
 
 from pymongo import ASCENDING, DeleteMany, DeleteOne, InsertOne, UpdateMany, UpdateOne
+from pymongo.client_session import ClientSession
 
 from ..collections import BaseCollection
 from ..utils import logger
@@ -299,7 +298,7 @@ class DocAnchor(Generic[DA]):
             )
         return None
 
-    async def connect(self, node: Optional["NodeArchitype"] = None) -> Optional[DA]:
+    def connect(self, node: Optional["NodeArchitype"] = None) -> Optional[DA]:
         """Retrieve the Architype from db and return."""
         jctx: JacContext = JCONTEXT.get()
 
@@ -310,7 +309,7 @@ class DocAnchor(Generic[DA]):
         cls = self.class_ref()
         if (
             cls
-            and (data := await cls.Collection.find_by_id(self.id))
+            and (data := cls.Collection.find_by_id(self.id))
             and isinstance(data, (NodeArchitype, EdgeArchitype))
             and (jctx.root.is_allowed(data) or (node and node.is_allowed(data)))
         ):
@@ -382,8 +381,8 @@ class DocArchitype(Generic[DA]):
 
         return {"context": ctx}
 
-    async def propagate_save(
-        self, changes: dict, session: AsyncIOMotorClientSession
+    def propagate_save(
+        self, changes: dict, session: ClientSession
     ) -> list[InsertOne[Any] | DeleteMany | DeleteOne | UpdateMany | UpdateOne]:
         """Propagate saving."""
         _ops: list[tuple[dict[str, ObjectId], dict[str, Any]]] = []
@@ -402,7 +401,7 @@ class DocArchitype(Generic[DA]):
                     for idx, danch in enumerate(_list):
                         if isinstance(danch, DocAnchor):
                             if not danch.connected and danch.arch:
-                                await danch.arch.save(session)
+                                danch.arch.save(session)
                             _list[idx] = danch.ref_id
             if _list:
                 _ops.append(({"_id": jd_id}, {ops[0]: target}))
@@ -415,43 +414,37 @@ class DocArchitype(Generic[DA]):
 
         return [UpdateOne(*_op) for _op in _ops]
 
-    async def save(
-        self, session: Optional[AsyncIOMotorClientSession] = None
-    ) -> DocAnchor[DA]:
+    def save(self, session: Optional[ClientSession] = None) -> DocAnchor[DA]:
         """Upsert Architype."""
         raise Exception("Save function not implemented yet!")
 
-    async def save_with_session(self) -> None:
+    def save_with_session(self) -> None:
         """Upsert Architype with session."""
-        async with await ArchCollection.get_session() as session:
-            async with session.start_transaction():
-                try:
-                    await self.save(session)
-                    await session.commit_transaction()
-                except Exception:
-                    await session.abort_transaction()
-                    logger.exception("Error saving node!")
-                    raise
+        with ArchCollection.get_session() as session, session.start_transaction():
+            try:
+                self.save(session)
+                session.commit_transaction()
+            except Exception:
+                session.abort_transaction()
+                logger.exception("Error saving node!")
+                raise
 
-    async def destroy(
-        self, session: Optional[AsyncIOMotorClientSession] = None
-    ) -> None:
+    def destroy(self, session: Optional[ClientSession] = None) -> None:
         """Destroy Architype."""
         raise Exception("Destroy function not implemented yet!")
 
-    async def destroy_with_session(self) -> None:
+    def destroy_with_session(self) -> None:
         """Destroy Architype with session."""
-        async with await ArchCollection.get_session() as session:
-            async with session.start_transaction():
-                try:
-                    await self.destroy(session)
-                    await session.commit_transaction()
-                except Exception:
-                    await session.abort_transaction()
-                    logger.exception(f"Error destroying {self._jac_type_.name}!")
-                    raise
+        with ArchCollection.get_session() as session, session.start_transaction():
+            try:
+                self.destroy(session)
+                session.commit_transaction()
+            except Exception:
+                session.abort_transaction()
+                logger.exception(f"Error destroying {self._jac_type_.name}!")
+                raise
 
-    async def is_allowed(self, to: DA, jctx: Optional["JacContext"] = None) -> bool:
+    def is_allowed(self, to: DA, jctx: Optional["JacContext"] = None) -> bool:
         """Access validation."""
         if not jctx:
             jctx = JCONTEXT.get()
@@ -478,7 +471,7 @@ class DocArchitype(Generic[DA]):
                 return True
 
         if isinstance(
-            to_root_access := await jctx.check_root_access(to_root),
+            to_root_access := jctx.check_root_access(to_root),
             DocAccess,
         ) and (cur_root_id := jctx.get_root_id()):
             for i in range(1, -1, -1):
@@ -512,7 +505,7 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
         """Create node architype."""
         self._jac_: NodeAnchor = NodeAnchor(obj=self)
 
-    async def connect(self) -> "NodeArchitype":
+    def connect(self) -> "NodeArchitype":
         """Return self."""
         return self
 
@@ -589,33 +582,29 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
         """Disallow others to access current Architype."""
         self._jac_doc_.restrict()
 
-    async def destroy_edges(
-        self, session: Optional[AsyncIOMotorClientSession] = None
-    ) -> None:
+    def destroy_edges(self, session: Optional[ClientSession] = None) -> None:
         """Destroy all EdgeArchitypes."""
         edges = self._jac_.edges
         jctx: JacContext = JCONTEXT.get()
-        await jctx.populate_edges(edges)
+        jctx.populate_edges(edges)
         for edge in edges:
-            if ed := await edge.connect():
-                await ed.destroy(session)
+            if ed := edge.connect():
+                ed.destroy(session)
 
-    async def destroy(
-        self, session: Optional[AsyncIOMotorClientSession] = None
-    ) -> None:
+    def destroy(self, session: Optional[ClientSession] = None) -> None:
         """Destroy NodeArchitype."""
         if session:
             if (jd := self._jac_doc_).connected and jd.current_access_level == 1:
-                await self.destroy_edges(session)
-                await self.Collection.delete_by_id(jd.id, session)
+                self.destroy_edges(session)
+                self.Collection.delete_by_id(jd.id, session)
                 jd.connected = False
             else:
-                await self.destroy_edges(session)
+                self.destroy_edges(session)
         else:
-            await self.destroy_with_session()
+            self.destroy_with_session()
 
-    async def save(
-        self, session: Optional[AsyncIOMotorClientSession] = None
+    def save(
+        self, session: Optional[ClientSession] = None
     ) -> DocAnchor["NodeArchitype"]:
         """Upsert NodeArchitype."""
         if session:
@@ -625,11 +614,11 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
                     jd.connected = True
                     jd.changes = {}
                     edges = [
-                        (await ed.save(session)).ref_id
+                        (ed.save(session)).ref_id
                         for edge in self._jac_.edges
-                        if (ed := await edge.connect())
+                        if (ed := edge.connect())
                     ]
-                    await self.Collection.insert_one(
+                    self.Collection.insert_one(
                         {**jd.json(), "edge": edges, **self.get_context()},
                         session=session,
                     )
@@ -638,15 +627,15 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
                     raise
             elif jd.current_access_level == 1 and (changes := jd.pull_changes()):
                 try:
-                    await self.Collection.bulk_write(
-                        await self.propagate_save(changes, session),
+                    self.Collection.bulk_write(
+                        self.propagate_save(changes, session),
                         session=session,
                     )
                 except Exception:
                     jd.rollback()
                     raise
         else:
-            await self.save_with_session()
+            self.save_with_session()
 
         return self._jac_doc_
 
@@ -660,7 +649,7 @@ class NodeAnchor(_NodeAnchor):
         default_factory=list
     )
 
-    async def get_edges(
+    def get_edges(
         self,
         dir: EdgeDir,
         filter_func: Optional[Callable[[list["EdgeArchitype"]], list["EdgeArchitype"]]],
@@ -668,29 +657,29 @@ class NodeAnchor(_NodeAnchor):
     ) -> list["EdgeArchitype"]:
         """Get edges connected to this node."""
         jctx: JacContext = JCONTEXT.get()
-        await jctx.populate_edges(self.edges)
+        jctx.populate_edges(self.edges)
 
         ret_edges: list[EdgeArchitype] = []
-        async for e, s, t in async_filter(self.edges):
+        for e, s, t in generator_filter(self.edges):
             if not filter_func or filter_func([e]):
                 if (
                     dir in [EdgeDir.OUT, EdgeDir.ANY]
                     and self.obj == s
                     and (not target_obj or t.__class__ in target_obj)
-                    and await s.is_allowed(t, jctx)
+                    and s.is_allowed(t, jctx)
                 ):
                     ret_edges.append(e)
                 if (
                     dir in [EdgeDir.IN, EdgeDir.ANY]
                     and self.obj == t
                     and (not target_obj or s.__class__ in target_obj)
-                    and await t.is_allowed(s, jctx)
+                    and t.is_allowed(s, jctx)
                 ):
                     ret_edges.append(e)
 
         return ret_edges
 
-    async def edges_to_nodes(
+    def edges_to_nodes(
         self,
         dir: EdgeDir,
         filter_func: Optional[Callable[[list["EdgeArchitype"]], list["EdgeArchitype"]]],
@@ -698,23 +687,23 @@ class NodeAnchor(_NodeAnchor):
     ) -> list[NodeArchitype]:
         """Get set of nodes connected to this node."""
         jctx: JacContext = JCONTEXT.get()
-        await jctx.populate_edges(self.edges)
+        jctx.populate_edges(self.edges)
 
         ret_nodes: list[NodeArchitype] = []
-        async for e, s, t in async_filter(self.edges):
+        for e, s, t in generator_filter(self.edges):
             if not filter_func or filter_func([e]):
                 if (
                     dir in [EdgeDir.OUT, EdgeDir.ANY]
                     and self.obj == s
                     and (not target_obj or t.__class__ in target_obj)
-                    and await s.is_allowed(t, jctx)
+                    and s.is_allowed(t, jctx)
                 ):
                     ret_nodes.append(t)
                 if (
                     dir in [EdgeDir.IN, EdgeDir.ANY]
                     and self.obj == t
                     and (not target_obj or s.__class__ in target_obj)
-                    and await t.is_allowed(s, jctx)
+                    and t.is_allowed(s, jctx)
                 ):
                     ret_nodes.append(s)
 
@@ -730,9 +719,7 @@ class Root(NodeArchitype, _Root):
         self._jac_: NodeAnchor = NodeAnchor(obj=self)
 
     @classmethod
-    async def register(
-        cls, session: Optional[AsyncIOMotorClientSession] = None
-    ) -> "DocAnchor[Root]":
+    def register(cls, session: Optional[ClientSession] = None) -> "DocAnchor[Root]":
         """Register Root."""
         root = cls()
         root_id = ObjectId()
@@ -742,7 +729,7 @@ class Root(NodeArchitype, _Root):
             root=root_id,
             arch=root,
         )
-        return await root.save(session)
+        return root.save(session)
 
     def get_context(self) -> dict:
         """Override context retrieval."""
@@ -784,7 +771,7 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
         """Create EdgeArchitype."""
         self._jac_: EdgeAnchor = EdgeAnchor(obj=self)
 
-    async def connect(self) -> "EdgeArchitype":
+    def connect(self) -> "EdgeArchitype":
         """Return self."""
         return self
 
@@ -815,29 +802,27 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
                 doc,
             )
 
-    async def destroy(
-        self, session: Optional[AsyncIOMotorClientSession] = None
-    ) -> None:
+    def destroy(self, session: Optional[ClientSession] = None) -> None:
         """Destroy EdgeArchitype."""
         if session:
             ea = self._jac_
             if (jd := self._jac_doc_).connected and jd.current_access_level == 1:
                 try:
-                    await ea.detach()
-                    await ea.source.save(session)  # type: ignore[union-attr]
-                    await ea.target.save(session)  # type: ignore[union-attr]
-                    await self.Collection.delete_by_id(jd.id, session)
+                    ea.detach()
+                    ea.source.save(session)  # type: ignore[union-attr]
+                    ea.target.save(session)  # type: ignore[union-attr]
+                    self.Collection.delete_by_id(jd.id, session)
                     jd.connected = False
                 except Exception:
-                    await ea.reattach()
+                    ea.reattach()
                     raise
             else:
-                await ea.detach()
+                ea.detach()
         else:
-            await self.destroy_with_session()
+            self.destroy_with_session()
 
-    async def save(
-        self, session: Optional[AsyncIOMotorClientSession] = None
+    def save(
+        self, session: Optional[ClientSession] = None
     ) -> DocAnchor["EdgeArchitype"]:
         """Upsert EdgeArchitype."""
         if session:
@@ -846,11 +831,11 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
                 try:
                     jd.connected = True
                     jd.changes = {}
-                    await self.Collection.insert_one(
+                    self.Collection.insert_one(
                         {
                             **jd.json(),
-                            "source": (await self._jac_.source.save(session)).ref_id,  # type: ignore[union-attr]
-                            "target": (await self._jac_.target.save(session)).ref_id,  # type: ignore[union-attr]
+                            "source": (self._jac_.source.save(session)).ref_id,  # type: ignore[union-attr]
+                            "target": (self._jac_.target.save(session)).ref_id,  # type: ignore[union-attr]
                             "is_undirected": self._jac_.is_undirected,
                             **self.get_context(),
                         },
@@ -861,7 +846,7 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
                     raise
             elif jd.current_access_level == 1 and (changes := jd.pull_changes()):
                 try:
-                    await self.Collection.update_by_id(
+                    self.Collection.update_by_id(
                         jd.id,
                         changes,
                         session=session,
@@ -870,7 +855,7 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
                     jd.rollback()
                     raise
         else:
-            await self.save_with_session()
+            self.save_with_session()
 
         return self._jac_doc_
 
@@ -896,33 +881,33 @@ class EdgeAnchor(_EdgeAnchor):
         trg.connect_edge(self.obj)
         return self
 
-    async def reattach(self) -> None:
+    def reattach(self) -> None:
         """Reattach edge from nodes."""
         if isinstance(src := self.source, DocAnchor):
-            src = self.source = await src.connect()
+            src = self.source = src.connect()
 
         if src:
             src._jac_.edges.append(self.obj)
             src.connect_edge(self.obj, True)
 
         if isinstance(tgt := self.target, DocAnchor):
-            tgt = self.target = await tgt.connect()
+            tgt = self.target = tgt.connect()
 
         if tgt:
             tgt._jac_.edges.append(self.obj)
             tgt.connect_edge(self.obj, True)
 
-    async def detach(self) -> None:
+    def detach(self) -> None:
         """Detach edge from nodes."""
         if isinstance(src := self.source, DocAnchor):
-            src = self.source = await src.connect()
+            src = self.source = src.connect()
 
         if src:
             src._jac_.edges.remove(self.obj)
             src.disconnect_edge(self.obj)
 
         if isinstance(tgt := self.target, DocAnchor):
-            tgt = self.target = await tgt.connect()
+            tgt = self.target = tgt.connect()
 
         if tgt:
             tgt._jac_.edges.remove(self.obj)
@@ -986,17 +971,15 @@ class JacContext:
             return None
         return self.root._jac_doc_.id
 
-    async def get_entry(self) -> NodeArchitype:
+    def get_entry(self) -> NodeArchitype:
         """Retrieve Node Entry Point."""
         if isinstance(self.entry, str):
             if self.entry and (match := TARGET_NODE_REGEX.search(self.entry)):
-                entry = await cast(
+                entry = cast(
                     Union[NodeArchitype, EdgeArchitype],
                     JCLASS[match.group(1)][match.group(2)],
                 ).Collection.find_by_id(ObjectId(match.group(3)))
-                if isinstance(entry, NodeArchitype) and await self.root.is_allowed(
-                    entry
-                ):
+                if isinstance(entry, NodeArchitype) and self.root.is_allowed(entry):
                     self.entry = entry
                 else:
                     raise HTTPException(status_code=403)
@@ -1007,7 +990,7 @@ class JacContext:
 
         return self.entry
 
-    async def check_root_access(
+    def check_root_access(
         self, root_id: Optional[ObjectId] = None
     ) -> Optional[DocAccess]:
         """Retrieve current root or specified root."""
@@ -1015,14 +998,14 @@ class JacContext:
             if (obj := self.get(root_id)) and isinstance(obj, Root):
                 return obj._jac_doc_.access
 
-            if isinstance(root := await Root.Collection.find_by_id(root_id), Root):
+            if isinstance(root := Root.Collection.find_by_id(root_id), Root):
                 self.set(root._jac_doc_.id, root)
                 return root._jac_doc_.access
         elif isinstance(self.root, Root):
             return self.root._jac_doc_.access
         return None
 
-    async def populate_edges(
+    def populate_edges(
         self, danchors: list[Union[EdgeArchitype, DocAnchor[EdgeArchitype]]]
     ) -> None:
         """Populate in-memory edges references."""
@@ -1034,7 +1017,7 @@ class JacContext:
 
         nodes: list[Union[NodeArchitype, DocAnchor[NodeArchitype]]] = []
         # allowed to throw error to stop executions
-        async for edge in (await EdgeArchitype.Collection.collection()).find(
+        for edge in (EdgeArchitype.Collection.collection()).find(
             {"_id": {"$in": list(queue.keys())}}
         ):
             if cls := queue.get(edge["_id"]):
@@ -1046,9 +1029,9 @@ class JacContext:
                     nodes.append(jac.source)
                     nodes.append(jac.target)
 
-        await self.populate_nodes(nodes)
+        self.populate_nodes(nodes)
 
-    async def populate_nodes(
+    def populate_nodes(
         self, danchors: list[Union[NodeArchitype, DocAnchor[NodeArchitype]]]
     ) -> None:
         """Populate in-memory nodes references."""
@@ -1059,16 +1042,14 @@ class JacContext:
         }
 
         # allowed to throw error to stop executions
-        async for edge in (await NodeArchitype.Collection.collection()).find(
+        for edge in (NodeArchitype.Collection.collection()).find(
             {"_id": {"$in": list(queue.keys())}}
         ):
             if cls := queue.get(edge["_id"]):
                 arch = cls.Collection.__document__(edge)
                 self.set(arch._jac_doc_.id, arch)
 
-    async def old_populate(
-        self, danchors: list[Union[DocArchitype, DocAnchor]]
-    ) -> None:
+    def old_populate(self, danchors: list[Union[DocArchitype, DocAnchor]]) -> None:
         """Populate in-memory references."""
         queue: dict[type, dict[str, dict]] = {}
         for danchor in danchors:
@@ -1079,7 +1060,7 @@ class JacContext:
                 qin: list = queue[cls]["_id"]["$in"]
                 qin.append(danchor.id)
         for cls, que in queue.items():
-            async for arch in await cls.Collection.find(que):
+            for arch in cls.Collection.find(que):
                 self.set(arch._jac_doc_.id, arch)
 
     def has(self, id: Union[ObjectId, str]) -> bool:
@@ -1140,18 +1121,18 @@ class JacContext:
             cast(dict, obj)[key] = {"id": val._jac_doc_.ref_id, **val.get_context()}
 
 
-async def async_filter(
+def generator_filter(
     edges: list[Union["EdgeArchitype", DocAnchor["EdgeArchitype"]]]
-) -> AsyncGenerator[tuple[EdgeArchitype, NodeArchitype, NodeArchitype], None]:
-    """Async filter for edges."""
+) -> Generator[tuple[EdgeArchitype, NodeArchitype, NodeArchitype], None, None]:
+    """Filter for edges."""
     for edge in edges:
         if (
-            (ed := await edge.connect())
+            (ed := edge.connect())
             and (edj := ed._jac_)
             and (edjs := edj.source)
             and (edjt := edj.target)
-            and (src := await edjs.connect())
-            and (tgt := await edjt.connect())
+            and (src := edjs.connect())
+            and (tgt := edjt.connect())
         ):
             yield (ed, src, tgt)
 

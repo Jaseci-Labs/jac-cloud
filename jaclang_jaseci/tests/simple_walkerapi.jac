@@ -44,12 +44,12 @@ node someone {
 
 @specs(path = "will-be-ignored-because-of-inner-class-Specs")
 walker create_sample_graph {
-    async can enter with `root entry {
+    can enter with `root entry {
         b = boy(val1="a", val2="b");
         g = girl(val="b");
         b ++> g;
         root ++> b;
-        await root.save();
+        root.save();
         return True;
     }
 
@@ -58,23 +58,23 @@ walker create_sample_graph {
 
 @specs
 walker visit_sample_graph {
-    async can enter1 with `root entry {
+    can enter1 with `root entry {
         report root;
-        boys = await [-->];
+        boys = [-->];
         report boys[0];
         visit boys;
         return 1;
     }
 
-    async can enter2 with boy entry {
-        girls = await [-->];
+    can enter2 with boy entry {
+        girls = [-->];
         report girls[0];
         visit girls;
         return 2;
     }
 
-    async can enter3 with girl entry {
-        anyone = await [-->];
+    can enter3 with girl entry {
+        anyone = [-->];
         report anyone;
         visit anyone;
         return 3;
@@ -82,53 +82,53 @@ walker visit_sample_graph {
 }
 
 walker update_sample_graph {
-    async can enter1 with `root entry {
-        boys = await [-->];
+    can enter1 with `root entry {
+        boys = [-->];
         visit boys;
     }
 
-    async can enter2 with boy entry {
-        old = await [-->];
+    can enter2 with boy entry {
+        old = [-->];
         report old[0];
 
         new = girl(val="new");
         here ++> new;
-        await new.save();
+        new.save();
 
-        await old[0].destroy();
+        old[0].destroy();
 
-        report (await [-->])[0];
+        report ([-->])[0];
     }
 
     obj Specs {}
 }
 
 walker create_list_field {
-    async can enter1 with `root entry {
+    can enter1 with `root entry {
         a = someone();
         root ++> a;
-        await root.save();
+        root.save();
         report a;
     }
     obj Specs {}
 }
 
 walker update_list_field {
-    async can enter2 with someone entry {
+    can enter2 with someone entry {
         here.val.append(1);
-        await here.save();
+        here.save();
         report here;
 
-        visit await [-->];
+        visit [-->];
     }
 
     obj Specs {}
 }
 
 walker get_list_field {
-    async can enter2 with someone entry {
+    can enter2 with someone entry {
         report here;
-        report await [-->];
+        report [-->];
     }
 
     obj Specs {}
@@ -137,14 +137,14 @@ walker get_list_field {
 walker allow_other {
     has root_id: str = None, node_id: str = None, write: bool = False;
 
-    async can enter2 with someone entry {
+    can enter2 with someone entry {
         if self.root_id {
             here.allow_root(DocAnchor.ref(self.root_id), self.write);
         }
         if self.node_id {
             here.allow_node(DocAnchor.ref(self.node_id), self.write);
         }
-        await here.save();
+        here.save();
         report here;
     }
 
@@ -154,7 +154,7 @@ walker allow_other {
 walker disallow_other {
     has root_id: str = None, node_id: str = None;
 
-    async can enter2 with someone entry {
+    can enter2 with someone entry {
         if self.root_id {
             here.disallow_root(DocAnchor.ref(self.root_id));
         }
@@ -162,7 +162,7 @@ walker disallow_other {
             here.disallow_node(DocAnchor.ref(self.node_id));
         }
 
-        await here.save();
+        here.save();
         report here;
     }
 
@@ -172,11 +172,11 @@ walker disallow_other {
 walker connect_other_node {
     has node_id: str = None;
 
-    async can enter2 with someone entry {
+    can enter2 with someone entry {
         if self.node_id {
-            other_node = await DocAnchor.ref(self.node_id).connect(here);
+            other_node = DocAnchor.ref(self.node_id).connect(here);
             here ++> other_node;
-            await here.save();
+            here.save();
         }
         report here;
     }
@@ -251,7 +251,7 @@ walker post_with_file {
     has multipleOptional: OptFiles = None;
 
 
-    async can enter with `root entry {
+    can enter with `root entry {
         print(self.single);
         print(self.multiple);
         print(self.singleOptional);
