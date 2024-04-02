@@ -2,7 +2,7 @@
 
 from typing import Any, Mapping, Type, Union, cast
 
-from bcrypt import gensalt, hashpw
+from passlib.hash import pbkdf2_sha512
 
 from pydantic import BaseModel, EmailStr, create_model
 from pydantic.fields import FieldInfo
@@ -25,7 +25,7 @@ class UserCommon(BaseModel):
         """Return BaseModel.model_dump where the password is hashed."""
         data = self.serialize()
         if isinstance(self.password, str):
-            data["password"] = hashpw(self.password.encode(), gensalt())
+            data["password"] = pbkdf2_sha512.hash(self.password).encode()
         return data
 
 

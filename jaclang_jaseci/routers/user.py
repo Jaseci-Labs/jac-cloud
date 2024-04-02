@@ -6,10 +6,12 @@ from fastapi import APIRouter, status
 from fastapi.exceptions import HTTPException
 from fastapi.responses import ORJSONResponse
 
+from passlib.hash import pbkdf2_sha512
+
 from ..models import User
 from ..models.ephemerals import UserRequest, UserVerification
 from ..plugins import Root
-from ..securities import create_code, create_token, verify_code, verify_pass
+from ..securities import create_code, create_token, verify_code
 from ..utils import Emailer, logger
 
 router = APIRouter(prefix="/user", tags=["user"])
@@ -60,7 +62,7 @@ async def verify(req: UserVerification) -> ORJSONResponse:
 async def root(req: UserRequest) -> ORJSONResponse:
     """Login user API."""
     user: User = await User.Collection.find_by_email(req.email)  # type: ignore
-    if not user or not verify_pass(req.password, user.password):
+    if not user or not pbkdf2_sha512.verify(req.password, user.password):
         raise HTTPException(status_code=400, detail="Invalid Email/Password!")
 
     if not user.is_activated:

@@ -11,8 +11,6 @@ from fastapi.security import HTTPBearer
 
 from jwt import decode, encode
 
-from passlib.context import CryptContext
-
 from ..memory import CodeMemory, TokenMemory
 from ..models import User
 from ..plugins import Root
@@ -95,5 +93,4 @@ async def authenticate(request: Request) -> None:
     raise HTTPException(status_code=401)
 
 
-verify_pass = CryptContext(schemes=["bcrypt"], deprecated="auto").verify
 authenticator = [Depends(HTTPBearer()), Depends(authenticate)]

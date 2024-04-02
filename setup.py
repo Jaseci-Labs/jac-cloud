@@ -21,7 +21,7 @@ setup(
         "python-dotenv==1.0.1",
         "uvicorn==0.27.0.post1",
         "pyjwt[crypto]==2.8.0",
-        "passlib[bcrypt]==1.7.4",
+        "passlib==1.7.4",
         "email-validator==2.1.0.post1",
         "orjson==3.9.13",
         "redis==5.0.1",
