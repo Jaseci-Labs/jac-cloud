@@ -265,8 +265,18 @@ walker post_with_body_and_file {
     has val: int;
     has single: File;
     has multiple: Files;
+    has optional_val: int = 0;
 
-    obj Specs {}
+    can enter with `root entry {
+        print(self.val);
+        print(self.optional_val);
+        print(self.single);
+        print(self.multiple);
+    }
+
+    obj Specs {
+        static has auth: bool = False;
+    }
 }
 
 with entry:__main__ {
