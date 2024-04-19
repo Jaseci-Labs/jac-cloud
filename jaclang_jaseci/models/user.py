@@ -49,11 +49,10 @@ class User(UserCommon):
             This the default User parser after getting a single document.
             You may override this to specify how/which class it will be casted/based.
             """
+            doc = cast(dict, doc)
             return User.model()(
-                id=str(doc.get("_id")),
-                email=cast(str, doc.get("email")),
-                password=cast(bytes, doc.get("password")) or NULL_BYTES,
-                root_id=str(doc.get("root_id")),
+                id=str(doc.pop("_id")),
+                password=cast(bytes, doc.pop("password")) or NULL_BYTES,
                 **doc,
             )
 

@@ -202,9 +202,9 @@ def populate_apis(cls: type) -> None:
         as_query: Union[str, list] = specs.as_query or []
         auth: bool = specs.auth or False
 
-        query = {}
-        body = {}
-        files = {}
+        query: dict[str, Any] = {}
+        body: dict[str, Any] = {}
+        files: dict[str, Any] = {}
 
         if path:
             if not path.startswith("/"):
@@ -225,13 +225,13 @@ def populate_apis(cls: type) -> None:
                     else:
                         body[key] = consts
 
-        payload = {
+        payload: dict[str, Any] = {
             "query": (
-                create_model(f"{cls.__name__.lower()}_query_model", **query),  # type: ignore[call-overload]
+                create_model(f"{cls.__name__.lower()}_query_model", **query),
                 Depends(),
             ),
             "files": (
-                create_model(f"{cls.__name__.lower()}_files_model", **files),  # type: ignore[call-overload]
+                create_model(f"{cls.__name__.lower()}_files_model", **files),
                 Depends(),
             ),
         }
@@ -245,7 +245,7 @@ def populate_apis(cls: type) -> None:
             else:
                 payload["body"] = (body_model, ...)
 
-        payload_model = create_model(f"{cls.__name__.lower()}_request_model", **payload)  # type: ignore[call-overload]
+        payload_model = create_model(f"{cls.__name__.lower()}_request_model", **payload)
 
         async def api_entry(
             request: Request,
