@@ -2,7 +2,7 @@
 import:py from jaclang_jaseci, FastAPI, start;
 import:py from jaclang_jaseci.types, File, Files, OptFile, OptFiles;
 import:py from jaclang_jaseci.models, User as BaseUser;
-import:py from jaclang_jaseci.plugins, specs, DocAnchor;
+import:py from jaclang_jaseci.plugins, specs, DocAnchor, JCONTEXT;
 import:py from jaclang_jaseci.utils, SendGridEmailer;
 
 # if possible to support this native class declaration
@@ -45,10 +45,13 @@ node someone {
 @specs(path = "will-be-ignored-because-of-inner-class-Specs")
 walker create_sample_graph {
     async can enter with `root entry {
+        JCONTEXT.get().save_on_exit = False;
+
         b = boy(val1="a", val2="b");
         g = girl(val="b");
         b ++> g;
         root ++> b;
+        await root.save();
         return True;
     }
 
@@ -58,6 +61,8 @@ walker create_sample_graph {
 @specs
 walker visit_sample_graph {
     async can enter1 with `root entry {
+        JCONTEXT.get().save_on_exit = False;
+
         report root;
         boys = await [-->];
         report boys[0];
@@ -66,6 +71,8 @@ walker visit_sample_graph {
     }
 
     async can enter2 with boy entry {
+        JCONTEXT.get().save_on_exit = False;
+
         girls = await [-->];
         report girls[0];
         visit girls;
@@ -73,6 +80,8 @@ walker visit_sample_graph {
     }
 
     async can enter3 with girl entry {
+        JCONTEXT.get().save_on_exit = False;
+
         anyone = await [-->];
         report anyone;
         visit anyone;
@@ -82,16 +91,21 @@ walker visit_sample_graph {
 
 walker update_sample_graph {
     async can enter1 with `root entry {
+        JCONTEXT.get().save_on_exit = False;
+
         boys = await [-->];
         visit boys;
     }
 
     async can enter2 with boy entry {
+        JCONTEXT.get().save_on_exit = False;
+
         old = await [-->];
         report old[0];
 
         new = girl(val="new");
         here ++> new;
+        await new.save();
 
         await old[0].destroy();
 
@@ -103,8 +117,11 @@ walker update_sample_graph {
 
 walker create_list_field {
     async can enter1 with `root entry {
+        JCONTEXT.get().save_on_exit = False;
+
         a = someone();
         root ++> a;
+        await root.save();
         report a;
     }
     obj Specs {}
@@ -112,7 +129,10 @@ walker create_list_field {
 
 walker update_list_field {
     async can enter2 with someone entry {
+        JCONTEXT.get().save_on_exit = False;
+
         here.val.append(1);
+        await here.save();
         report here;
 
         visit await [-->];
@@ -123,6 +143,8 @@ walker update_list_field {
 
 walker get_list_field {
     async can enter2 with someone entry {
+        JCONTEXT.get().save_on_exit = False;
+
         report here;
         report await [-->];
     }
@@ -134,12 +156,15 @@ walker allow_other {
     has root_id: str = None, node_id: str = None, write: bool = False;
 
     async can enter2 with someone entry {
+        JCONTEXT.get().save_on_exit = False;
+
         if self.root_id {
             here.allow_root(DocAnchor.ref(self.root_id), self.write);
         }
         if self.node_id {
             here.allow_node(DocAnchor.ref(self.node_id), self.write);
         }
+        await here.save();
         report here;
     }
 
@@ -150,6 +175,8 @@ walker disallow_other {
     has root_id: str = None, node_id: str = None;
 
     async can enter2 with someone entry {
+        JCONTEXT.get().save_on_exit = False;
+
         if self.root_id {
             here.disallow_root(DocAnchor.ref(self.root_id));
         }
@@ -157,6 +184,7 @@ walker disallow_other {
             here.disallow_node(DocAnchor.ref(self.node_id));
         }
 
+        await here.save();
         report here;
     }
 
@@ -167,10 +195,12 @@ walker connect_other_node {
     has node_id: str = None;
 
     async can enter2 with someone entry {
+        JCONTEXT.get().save_on_exit = False;
+
         if self.node_id {
             other_node = await DocAnchor.ref(self.node_id).connect(here);
             here ++> other_node;
-
+            await here.save();
         }
         report here;
     }
@@ -246,6 +276,8 @@ walker post_with_file {
 
 
     async can enter with `root entry {
+        JCONTEXT.get().save_on_exit = False;
+
         print(self.single);
         print(self.multiple);
         print(self.singleOptional);
@@ -262,6 +294,8 @@ walker post_with_body_and_file {
     has optional_val: int = 0;
 
     can enter with `root entry {
+        JCONTEXT.get().save_on_exit = False;
+
         print(self.val);
         print(self.optional_val);
         print(self.single);
@@ -275,8 +309,5 @@ walker post_with_body_and_file {
 
 with entry:__main__ {
     # SendGridEmailer.start();
-    start(
-        host="0.0.0.0",
-        port=8001
-    );
+    start();
 }

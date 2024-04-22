@@ -2,7 +2,7 @@
 
 from bson import ObjectId
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 from fastapi.responses import ORJSONResponse
 
@@ -10,7 +10,7 @@ from passlib.hash import pbkdf2_sha512
 
 from ..models import User
 from ..models.ephemerals import UserRequest, UserVerification
-from ..plugins import Root
+from ..plugins import JCONTEXT, JacContext, Root
 from ..securities import create_code, create_token, verify_code
 from ..utils import Emailer, logger
 
@@ -20,8 +20,9 @@ User = User.model()  # type: ignore[misc]
 
 
 @router.post("/register", status_code=status.HTTP_200_OK)
-async def register(req: User.register_type()) -> ORJSONResponse:  # type: ignore
+async def register(request: Request, req: User.register_type()) -> ORJSONResponse:  # type: ignore
     """Register user API."""
+    JCONTEXT.set(JacContext(request, save_on_exit=False))
     async with await Root.Collection.get_session() as session:
         async with session.start_transaction():
             try:

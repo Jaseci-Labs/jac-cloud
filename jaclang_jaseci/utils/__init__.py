@@ -1,7 +1,6 @@
 """Common Utilities."""
 
 import logging
-import sys
 from datetime import datetime, timedelta, timezone
 from random import choice
 from string import ascii_letters, digits
@@ -34,8 +33,7 @@ def make_optional(cls: type) -> type:
 
 
 logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler(sys.stdout))
-# logging.getLogger('passlib').setLevel(logging.ERROR)
+# logger.addHandler(logging.StreamHandler(sys.stdout))
 
 __all__ = [
     "Emailer",

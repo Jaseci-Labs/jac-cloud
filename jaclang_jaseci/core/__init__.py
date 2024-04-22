@@ -1,10 +1,14 @@
 """JacLang FastAPI Core."""
 
+from os import getenv
 from typing import Any
 
 from fastapi import FastAPI as _FaststAPI
 
 from uvicorn import run as _run
+
+HOST = getenv("HOST", "0.0.0.0")
+PORT = int(getenv("HOST", "8000"))
 
 
 class FastAPI:
@@ -28,7 +32,7 @@ class FastAPI:
 
     @classmethod
     def start(
-        cls, host: str = "0.0.0.0", port: int = 8000, **kwargs: Any  # noqa ANN401
+        cls, host: str = HOST, port: int = PORT, **kwargs: Any  # noqa ANN401
     ) -> None:
         """Run FastAPI Handler via Uvicorn."""
         _run(cls.get(), host=host, port=port, **kwargs)

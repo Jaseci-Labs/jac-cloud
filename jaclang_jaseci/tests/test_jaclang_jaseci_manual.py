@@ -16,7 +16,9 @@ class JacLangJaseciTests(IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self) -> None:
         """Reset DB and wait for server."""
-        self.host = "http://0.0.0.0:8001"
+        self.host = "http://0.0.0.0:8000"
+        BaseCollection.__client__ = None
+        BaseCollection.__database__ = None
         self.client = BaseCollection.get_client()
         self.users = []
         self.database = getenv("DATABASE_NAME", "jaclang")
@@ -142,9 +144,7 @@ class JacLangJaseciTests(IsolatedAsyncioTestCase):
 
         report = reports[1]
         self.assertTrue(report["id"].startswith("n:girl:"))
-        self.assertEqual(
-            {"val": "b"}, report["context"]
-        )  # still b since old girl node is not yet deleted
+        self.assertEqual({"val": "new"}, report["context"])
 
         res = self.post_api("create_list_field")
         self.assertEqual(200, res["status"])

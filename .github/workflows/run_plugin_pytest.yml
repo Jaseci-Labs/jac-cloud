@@ -41,6 +41,7 @@ jobs:
     - name: Run tests
       run: |
         jac run jaclang_jaseci/tests/fixtures/simple_walkerapi.jac &
+        jac run jaclang_jaseci/tests/fixtures/simple_walkerapi_manual.jac &
         sleep 1
         pytest
 
