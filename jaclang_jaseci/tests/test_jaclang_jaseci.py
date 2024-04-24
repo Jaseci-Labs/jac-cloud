@@ -17,6 +17,8 @@ class JacLangJaseciTests(IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         """Reset DB and wait for server."""
         self.host = "http://0.0.0.0:8001"
+        BaseCollection.__client__ = None
+        BaseCollection.__database__ = None
         self.client = BaseCollection.get_client()
         self.users = []
         self.database = getenv("DATABASE_NAME", "jaclang")
