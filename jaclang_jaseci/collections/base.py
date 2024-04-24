@@ -23,14 +23,7 @@ from motor.motor_asyncio import (
     AsyncIOMotorDatabase,
 )
 
-from pymongo import (
-    DeleteMany,
-    DeleteOne,
-    IndexModel,
-    InsertOne,
-    UpdateMany,
-    UpdateOne,
-)
+from pymongo import DeleteMany, DeleteOne, IndexModel, InsertOne, UpdateMany, UpdateOne
 from pymongo.server_api import ServerApi
 
 from ..utils import logger
@@ -45,13 +38,30 @@ class BaseCollection(Generic[T]):
     This interface use for connecting to mongodb.
     """
 
+    ##########################################
+    # ---------- Child Properties ---------- #
+    ##########################################
+
+    # Collection Name
     __collection__: Optional[str] = None
+    # Singleton Collection Instance
     __collection_obj__: Optional[AsyncIOMotorCollection] = None
+
+    # Custom Index Declaration
     __indexes__: list = []
+
+    # Transient Field List
     __excluded__: list = []
+    # Converted Mapping of Transient Fields
     __excluded_obj__: Optional[Mapping[str, Any]] = None
 
+    ##########################################
+    # ---------- Parent Properties --------- #
+    ##########################################
+
+    # Singleton client instance
     __client__: Optional[AsyncIOMotorClient] = None
+    # Singleton database instance
     __database__: Optional[AsyncIOMotorDatabase] = None
 
     @classmethod
