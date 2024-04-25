@@ -32,6 +32,7 @@ setup(
     package_data={},
     entry_points={
         "jac": [
+            "walker_api = jaclang_jaseci.plugins.walker_api:JacPlugin",
             "graph_doc = jaclang_jaseci.plugins.graph_doc:JacPlugin",
         ],
     },
