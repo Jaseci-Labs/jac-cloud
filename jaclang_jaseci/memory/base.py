@@ -11,27 +11,38 @@ from redis.asyncio.client import Redis
 from ..utils import logger
 
 
-class CommonMemory:
+class BaseMemory:
     """
     Base Memory interface.
 
     This interface use for connecting to redis.
     """
 
+    ##########################################
+    # ---------- Child Properties ---------- #
+    ##########################################
+
+    # Redis Hash Name
     __table__ = "common"
+
+    ##########################################
+    # ---------- Parent Properties --------- #
+    ##########################################
+
+    # Singleton redis client instance
     __redis__: Optional[Redis] = None
 
     @staticmethod
     def get_rd() -> Redis:
         """Return redis.Redis for Redis connection."""
-        if not isinstance(CommonMemory.__redis__, Redis):
-            CommonMemory.__redis__ = aioredis.from_url(
+        if not isinstance(BaseMemory.__redis__, Redis):
+            BaseMemory.__redis__ = aioredis.from_url(
                 getenv("REDIS_HOST", "redis://localhost"),
                 port=int(getenv("REDIS_PORT", "6379")),
                 username=getenv("REDIS_USER"),
                 password=getenv("REDIS_PASS"),
             )
-        return CommonMemory.__redis__
+        return BaseMemory.__redis__
 
     @classmethod
     async def get(cls, key: str) -> Any:  # noqa: ANN401
@@ -44,7 +55,7 @@ class CommonMemory:
             return None
 
     @classmethod
-    async def keys(cls) -> list[str]:
+    async def keys(cls) -> list[bytes]:
         """Return all available keys."""
         try:
             redis = cls.get_rd()

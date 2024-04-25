@@ -1,9 +1,9 @@
 """TokenMemory Interface."""
 
-from .common import CommonMemory
+from .base import BaseMemory
 
 
-class TokenMemory(CommonMemory):
+class TokenMemory(BaseMemory):
     """Token Memory Interface.
 
     This interface is for Token Management.

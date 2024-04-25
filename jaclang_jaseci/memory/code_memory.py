@@ -1,9 +1,9 @@
 """CodeMemory Interface."""
 
-from .common import CommonMemory
+from .base import BaseMemory
 
 
-class CodeMemory(CommonMemory):
+class CodeMemory(BaseMemory):
     """Code Memory Interface.
 
     This interface is for Code Management such as Verification Code.
