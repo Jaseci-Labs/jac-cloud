@@ -62,7 +62,7 @@ class ArchCollection(BaseCollection[T]):
     def build_node(
         cls, doc_anc: "DocAnchor[NodeArchitype]", doc: Mapping[str, Any]
     ) -> "NodeArchitype":
-        """Translate EdgeArchitypes edges into DocAnchor edges."""
+        """Build NodeArchitypes from document."""
         arch: NodeArchitype = doc_anc.build(**(doc.get("context") or {}))
         arch._jac_.edges = [
             ed
@@ -93,10 +93,23 @@ class ArchCollection(BaseCollection[T]):
 class DocAccess:
     """DocAnchor for Access Handler."""
 
+    # 0 == not publicly accessible
+    # 1 == publicly accessible without right access
+    # 2 == publicly accessible with right access
     all: int = 0
+
+    # tuple(
+    #   [] == list of node ObjectId that has read access
+    #   [] == list of node ObjectId that has right access
+    # )
     nodes: tuple[set[ObjectId], set[ObjectId]] = field(
         default_factory=lambda: (set(), set())
     )
+
+    # tuple(
+    #   [] == list of user (via root_id) that has read access
+    #   [] == list of user (via root_id) that has right access
+    # )
     roots: tuple[set[ObjectId], set[ObjectId]] = field(
         default_factory=lambda: (set(), set())
     )
@@ -134,10 +147,19 @@ class DocAnchor(Generic[DA]):
     access: DocAccess = field(default_factory=DocAccess)
     connected: bool = False
     arch: Optional["DocArchitype[DA]"] = None
+
+    # checker if needs to update on db
     changes: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # context checker if update happens for each field
     hashes: dict[str, int] = field(default_factory=dict)
+    # rollback holder if something happens on updating
     rollback_changes: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # rollback holder if something happens on updating
     rollback_hashes: dict[str, int] = field(default_factory=dict)
+
+    # 0 == don't have access
+    # 1 == with read access
+    # 2 == with write access
     current_access_level: Optional[int] = None
 
     @property
@@ -1085,22 +1107,6 @@ class JacContext:
         ):
             if cls := queue.get(edge["_id"]):
                 arch = cls.Collection.__document__(edge)
-                self.set(arch._jac_doc_.id, arch)
-
-    async def old_populate(
-        self, danchors: list[Union[DocArchitype, DocAnchor]]
-    ) -> None:
-        """Populate in-memory references."""
-        queue: dict[type, dict[str, dict]] = {}
-        for danchor in danchors:
-            if isinstance(danchor, DocAnchor) and not self.has(danchor.id):
-                cls = danchor.class_ref()
-                if cls not in queue:
-                    queue[cls] = {"_id": {"$in": []}}
-                qin: list = queue[cls]["_id"]["$in"]
-                qin.append(danchor.id)
-        for cls, que in queue.items():
-            async for arch in await cls.Collection.find(que):
                 self.set(arch._jac_doc_.id, arch)
 
     def has(self, id: Union[ObjectId, str]) -> bool:
