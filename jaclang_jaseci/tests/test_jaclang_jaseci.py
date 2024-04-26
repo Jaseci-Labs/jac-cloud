@@ -22,7 +22,6 @@ class JacLangJaseciTests(IsolatedAsyncioTestCase):
         self.client = BaseCollection.get_client()
         self.users = []
         self.database = getenv("DATABASE_NAME", "jaclang")
-        await self.client.drop_database(self.database)
         count = 0
         while True:
             if count > 5:

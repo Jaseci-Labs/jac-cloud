@@ -58,6 +58,10 @@ class JType(Enum):
 class ArchCollection(BaseCollection[T]):
     """Default Collection for Architypes."""
 
+    __default_indexes__: list[dict] = [
+        {"keys": [("_id", ASCENDING), ("name", ASCENDING), ("root", ASCENDING)]}
+    ]
+
     @classmethod
     def build_node(
         cls, doc_anc: "DocAnchor[NodeArchitype]", doc: Mapping[str, Any]
@@ -547,9 +551,6 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
         """Default NodeArchitype Collection."""
 
         __collection__ = "node"
-        __indexes__ = [
-            {"fields": [("_id", ASCENDING), ("name", ASCENDING), ("root", ASCENDING)]}
-        ]
 
         @classmethod
         def __document__(cls, doc: Mapping[str, Any]) -> "NodeArchitype":
@@ -783,9 +784,6 @@ class Root(NodeArchitype, _Root):
         """Default Root Collection."""
 
         __collection__ = "node"
-        __indexes__ = [
-            {"fields": [("_id", ASCENDING), ("name", ASCENDING), ("root", ASCENDING)]}
-        ]
 
         @classmethod
         def __document__(cls, doc: Mapping[str, Any]) -> "Root":
@@ -824,9 +822,6 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
         """Default EdgeArchitype Collection."""
 
         __collection__ = "edge"
-        __indexes__ = [
-            {"fields": [("_id", ASCENDING), ("name", ASCENDING), ("root", ASCENDING)]}
-        ]
 
         @classmethod
         def __document__(cls, doc: Mapping[str, Any]) -> "EdgeArchitype":
@@ -981,9 +976,6 @@ class GenericEdge(EdgeArchitype):
         """Default Generic Collection."""
 
         __collection__ = "edge"
-        __indexes__ = [
-            {"fields": [("_id", ASCENDING), ("name", ASCENDING), ("root", ASCENDING)]}
-        ]
 
         @classmethod
         def __document__(cls, doc: Mapping[str, Any]) -> "GenericEdge":
@@ -1077,7 +1069,7 @@ class JacContext:
 
         nodes: list[Union[NodeArchitype, DocAnchor[NodeArchitype]]] = []
         # allowed to throw error to stop executions
-        async for edge in (await EdgeArchitype.Collection.collection()).find(
+        async for edge in EdgeArchitype.Collection.collection().find(
             {"_id": {"$in": list(queue.keys())}}
         ):
             if cls := queue.get(edge["_id"]):
@@ -1102,7 +1094,7 @@ class JacContext:
         }
 
         # allowed to throw error to stop executions
-        async for edge in (await NodeArchitype.Collection.collection()).find(
+        async for edge in NodeArchitype.Collection.collection().find(
             {"_id": {"$in": list(queue.keys())}}
         ):
             if cls := queue.get(edge["_id"]):
@@ -1224,6 +1216,8 @@ async def async_filter(
 
 Root.__name__ = ""
 GenericEdge.__name__ = ""
+NodeCollection = NodeArchitype.Collection
+EdgeCollection = EdgeArchitype.Collection
 
 JCLASS: dict[str, dict[str, type]] = {"n": {"": Root}, "e": {"": GenericEdge}}
 

@@ -482,3 +482,40 @@ root2.unrestrict(True);
 # back to normal and subject for node/root access validation for all nodes from root2
 root2.restrict();
 ```
+### **Node Customization**
+- Adding index on val field
+```python
+node girl {
+    has val: str;
+
+    ::py::
+    class Collection(NodeCollection):
+        __indexes__: list = [
+            {"keys": [("context.val", 1)]}
+        ]
+    ::py::
+}
+
+# Format
+{ # single index
+    "keys": [("context.has_var_name", <order:int: -1 or 0 or 1>)]
+}
+{ # compound index
+    "keys": [("context.has_var_name1", <order:int: -1 or 0 or 1>), ("context.has_var_name2", <order:int: -1 or 0 or 1>)]
+}
+{ # with optional fields
+    "keys": [("context.has_var_name", <order:int: -1 or 0 or 1>)],
+    "name": "custom name to use for this index - if none is given, a name will be generated."
+    "unique": "if True, creates a uniqueness constraint on the index."
+    "background": "if True, this index should be created in the background."
+    "sparse": "if True, omit from the index any documents that lack the indexed field."
+    "bucketSize": "for use with geoHaystack indexes. Number of documents to group together within a certain proximity to a given longitude and latitude."
+    "min": "minimum value for keys in a ~pymongo.GEO2D index."
+    "max": "maximum value for keys in a ~pymongo.GEO2D index."
+    "expireAfterSeconds": "<int> Used to create an expiring (TTL) collection. MongoDB will automatically delete documents from this collection after <int> seconds. The indexed field must be a UTC datetime or the data will not expire."
+    "partialFilterExpression": "A document that specifies a filter for a partial index."
+    "collation": "An instance of ~pymongo.collation.Collation that specifies the collation to use."
+    "wildcardProjection": "Allows users to include or exclude specific field paths from a wildcard index_ using the { "$**" : 1} key pattern. Requires MongoDB >= 4.2."
+    "hidden": "if True, this index will be hidden from the query planner and will not be evaluated as part of query plan selection. Requires MongoDB >= 4.4."
+}
+```

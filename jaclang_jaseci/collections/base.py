@@ -4,7 +4,6 @@ from os import getenv
 from typing import (
     Any,
     AsyncGenerator,
-    Awaitable,
     Generic,
     Iterable,
     Mapping,
@@ -48,7 +47,8 @@ class BaseCollection(Generic[T]):
     __collection_obj__: Optional[AsyncIOMotorCollection] = None
 
     # Custom Index Declaration
-    __indexes__: list = []
+    __indexes__: list[dict] = []
+    __default_indexes__: list[dict] = []
 
     # Transient Field List
     __excluded__: list = []
@@ -63,6 +63,37 @@ class BaseCollection(Generic[T]):
     __client__: Optional[AsyncIOMotorClient] = None
     # Singleton database instance
     __database__: Optional[AsyncIOMotorDatabase] = None
+
+    @staticmethod
+    async def apply_indexes() -> None:
+        """Apply Indexes."""
+        queue: list[type[BaseCollection]] = BaseCollection.__subclasses__()
+        while queue:
+            cls = queue.pop(-1)
+
+            if scls := cls.__subclasses__():
+                queue.extend(scls)
+
+            if cls.__collection__ is None:
+                continue
+
+            if cls.__excluded__:
+                excl_obj = {}
+                for excl in cls.__excluded__:
+                    excl_obj[excl] = False
+                cls.__excluded_obj__ = excl_obj
+
+            idxs = []
+            if cls.__default_indexes__:
+                for idx in cls.__default_indexes__:
+                    idxs.append(IndexModel(**idx))
+
+            if cls.__indexes__:
+                for idx in cls.__indexes__:
+                    idxs.append(IndexModel(**idx))
+
+            if idxs:
+                await cls.collection().create_indexes(idxs)
 
     @classmethod
     def __document__(cls, doc: Mapping[str, Any]) -> Union[T, Mapping[str, Any]]:
@@ -121,30 +152,12 @@ class BaseCollection(Generic[T]):
         return BaseCollection.get_database().get_collection(collection)
 
     @classmethod
-    async def collection(
-        cls, session: Optional[AsyncIOMotorClientSession] = None
-    ) -> AsyncIOMotorCollection:
+    def collection(cls) -> AsyncIOMotorCollection:
         """Return pymongo.collection.Collection for collection connection based from attribute of it's child class."""
         if not isinstance(cls.__collection_obj__, AsyncIOMotorCollection):
             cls.__collection_obj__ = cls.get_collection(
                 getattr(cls, "__collection__", None) or cls.__name__.lower()
             )
-
-            if cls.__excluded__:
-                excl_obj = {}
-                for excl in cls.__excluded__:
-                    excl_obj[excl] = False
-                cls.__excluded_obj__ = excl_obj
-
-            if cls.__indexes__:
-                idxs = []
-                while cls.__indexes__:
-                    idx = cls.__indexes__.pop()
-                    idxs.append(IndexModel(idx.pop("fields"), **idx))
-
-                ops = cls.__collection_obj__.create_indexes(idxs, session=session)
-                if isinstance(ops, Awaitable):
-                    await ops
 
         return cls.__collection_obj__
 
@@ -157,9 +170,7 @@ class BaseCollection(Generic[T]):
     ) -> Optional[ObjectId]:
         """Insert single document and return the inserted id."""
         try:
-            collection = await cls.collection(session=session)
-
-            ops = await collection.insert_one(doc, session=session, **kwargs)
+            ops = await cls.collection().insert_one(doc, session=session, **kwargs)
             return ops.inserted_id
         except Exception:
             if session:
@@ -176,9 +187,7 @@ class BaseCollection(Generic[T]):
     ) -> list[ObjectId]:
         """Insert multiple documents and return the inserted ids."""
         try:
-            collection = await cls.collection(session=session)
-
-            ops = await collection.insert_many(docs, session=session, **kwargs)
+            ops = await cls.collection().insert_many(docs, session=session, **kwargs)
             return ops.inserted_ids
         except Exception:
             if session:
@@ -196,9 +205,9 @@ class BaseCollection(Generic[T]):
     ) -> int:
         """Update single document and return if it's modified or not."""
         try:
-            collection = await cls.collection(session=session)
-
-            ops = await collection.update_one(filter, update, session=session, **kwargs)
+            ops = await cls.collection().update_one(
+                filter, update, session=session, **kwargs
+            )
             return ops.modified_count
         except Exception:
             if session:
@@ -216,9 +225,7 @@ class BaseCollection(Generic[T]):
     ) -> int:
         """Update multiple documents and return how many docs are modified."""
         try:
-            collection = await cls.collection(session=session)
-
-            ops = await collection.update_many(
+            ops = await cls.collection().update_many(
                 filter, update, session=session, **kwargs
             )
             return ops.modified_count
@@ -248,12 +255,10 @@ class BaseCollection(Generic[T]):
         **kwargs: Any,  # noqa: ANN401
     ) -> AsyncGenerator[Union[T, Mapping[str, Any]], None]:
         """Retrieve multiple documents."""
-        collection = await cls.collection()
-
         if projection is None:
             projection = cls.__excluded_obj__
 
-        docs = collection.find(filter, projection, session=session, **kwargs)
+        docs = cls.collection().find(filter, projection, session=session, **kwargs)
         return await cls.__documents__(docs)
 
     @classmethod
@@ -265,12 +270,10 @@ class BaseCollection(Generic[T]):
         **kwargs: Any,  # noqa: ANN401
     ) -> Optional[Union[T, Mapping[str, Any]]]:
         """Retrieve single document from db."""
-        collection = await cls.collection()
-
         if projection is None:
             projection = cls.__excluded_obj__
 
-        if ops := await collection.find_one(
+        if ops := await cls.collection().find_one(
             filter, projection, session=session, **kwargs
         ):
             return cls.__document__(ops)
@@ -298,9 +301,7 @@ class BaseCollection(Generic[T]):
     ) -> int:
         """Delete document/s via filter and return how many documents are deleted."""
         try:
-            collection = await cls.collection(session=session)
-
-            ops = await collection.delete_many(filter, session=session, **kwargs)
+            ops = await cls.collection().delete_many(filter, session=session, **kwargs)
             return ops.deleted_count
         except Exception:
             if session:
@@ -317,9 +318,7 @@ class BaseCollection(Generic[T]):
     ) -> int:
         """Delete single document via filter and return if it's deleted or not."""
         try:
-            collection = await cls.collection(session=session)
-
-            ops = await collection.delete_one(filter, session=session, **kwargs)
+            ops = await cls.collection().delete_one(filter, session=session, **kwargs)
             return ops.deleted_count
         except Exception:
             if session:
@@ -346,9 +345,7 @@ class BaseCollection(Generic[T]):
     ) -> dict:
         """Bulk write operations."""
         try:
-            collection = await cls.collection(session=session)
-
-            _ops = await collection.bulk_write(ops, session=session, **kwargs)
+            _ops = await cls.collection().bulk_write(ops, session=session, **kwargs)
             return _ops.bulk_api_result
         except Exception:
             if session:

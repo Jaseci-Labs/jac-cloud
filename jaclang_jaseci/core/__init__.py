@@ -1,7 +1,8 @@
 """JacLang FastAPI Core."""
 
+from contextlib import asynccontextmanager
 from os import getenv
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI as _FaststAPI
 
@@ -20,7 +21,15 @@ class FastAPI:
     def get(cls) -> _FaststAPI:
         """Get or Create new instance of FastAPI."""
         if not isinstance(cls.__app__, _FaststAPI):
-            cls.__app__ = _FaststAPI()
+
+            @asynccontextmanager
+            async def lifespan(app: _FaststAPI) -> AsyncGenerator[None, _FaststAPI]:
+                from ..collections import BaseCollection
+
+                await BaseCollection.apply_indexes()
+                yield
+
+            cls.__app__ = _FaststAPI(lifespan=lifespan)
 
             from ..routers import healthz_router, user_router
             from ..plugins import walker_router

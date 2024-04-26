@@ -17,7 +17,7 @@ class UserCollection(BaseCollection[T]):
 
     __collection__: Optional[str] = "user"
     __excluded__: list[str] = ["password"]
-    __indexes__: list[dict] = [{"fields": ["email"], "unique": True}]
+    __indexes__: list[dict] = [{"keys": ["email"], "unique": True}]
 
     @classmethod
     async def find_by_email(cls, email: str) -> Optional[Union[T, Mapping[str, Any]]]:

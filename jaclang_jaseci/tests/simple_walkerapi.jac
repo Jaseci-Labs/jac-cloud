@@ -2,7 +2,7 @@
 import:py from jaclang_jaseci, FastAPI, start;
 import:py from jaclang_jaseci.types, File, Files, OptFile, OptFiles;
 import:py from jaclang_jaseci.models, User as BaseUser;
-import:py from jaclang_jaseci.plugins, specs, DocAnchor;
+import:py from jaclang_jaseci.plugins, specs, DocAnchor, NodeCollection;
 import:py from jaclang_jaseci.utils, SendGridEmailer;
 
 # if possible to support this native class declaration
@@ -36,6 +36,14 @@ node boy {
 
 node girl {
     has val: str;
+
+    ::py::
+    class Collection(NodeCollection):
+        __indexes__: list = [
+            {"keys": [("_id", 1), ("name", 1), ("root", 1)]},
+            {"keys": [("context.val", 1)]}
+        ]
+    ::py::
 }
 
 node someone {

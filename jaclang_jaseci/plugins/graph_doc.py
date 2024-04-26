@@ -175,6 +175,6 @@ def populate_collection(
             coll.__name__, (coll, ArchCollection), {"__collection__": collection}
         )
     else:
-        cls.Collection = type(coll.__name__, (coll,), {})  # type: ignore
+        cls.Collection = type(coll.__name__, (coll,), {"__collection__": collection})  # type: ignore
 
     return cls
