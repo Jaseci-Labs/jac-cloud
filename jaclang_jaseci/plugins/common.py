@@ -1,5 +1,6 @@
 """Common Classes for FastAPI Graph Integration."""
 
+from asyncio import get_event_loop
 from contextvars import ContextVar
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, is_dataclass
@@ -325,7 +326,11 @@ class DocAnchor(Generic[DA]):
             )
         return None
 
-    async def connect(self, node: Optional["NodeArchitype"] = None) -> Optional[DA]:
+    def connect(self, node: Optional["NodeArchitype"] = None) -> Optional[DA]:
+        """Sync Retrieve the Architype from db and return."""
+        return get_event_loop().run_until_complete(self._connect(node))
+
+    async def _connect(self, node: Optional["NodeArchitype"] = None) -> Optional[DA]:
         """Retrieve the Architype from db and return."""
         jctx: JacContext = JacContext.get_context()
 
@@ -432,7 +437,7 @@ class DocArchitype(Generic[DA]):
                     for idx, danch in enumerate(_list):
                         if isinstance(danch, DocAnchor):
                             if danch.arch:
-                                await danch.arch.save(session)
+                                await danch.arch._save(session)
                             _list[idx] = danch.ref_id
             if _list:
                 _ops.append(({"_id": jd_id}, {ops[0]: target}))
@@ -445,7 +450,21 @@ class DocArchitype(Generic[DA]):
 
         return [UpdateOne(*_op) for _op in _ops]
 
-    async def save(
+    def connect(self: DA) -> "DA":
+        """Sync Return self."""
+        return get_event_loop().run_until_complete(self._connect())
+
+    async def _connect(self: DA) -> "DA":
+        """Return self."""
+        return self
+
+    def save(
+        self, session: Optional[AsyncIOMotorClientSession] = None
+    ) -> DocAnchor[DA]:
+        """Sync upsert Architype."""
+        return get_event_loop().run_until_complete(self._save(session))
+
+    async def _save(
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> DocAnchor[DA]:
         """Upsert Architype."""
@@ -456,14 +475,18 @@ class DocArchitype(Generic[DA]):
         async with await ArchCollection.get_session() as session:
             async with session.start_transaction():
                 try:
-                    await self.save(session)
+                    await self._save(session)
                     await session.commit_transaction()
                 except Exception:
                     await session.abort_transaction()
                     logger.exception("Error saving node!")
                     raise
 
-    async def destroy(
+    def destroy(self, session: Optional[AsyncIOMotorClientSession] = None) -> None:
+        """Sync Destroy Architype."""
+        get_event_loop().run_until_complete(self._save(session))
+
+    async def _destroy(
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
         """Destroy Architype."""
@@ -474,7 +497,7 @@ class DocArchitype(Generic[DA]):
         async with await ArchCollection.get_session() as session:
             async with session.start_transaction():
                 try:
-                    await self.destroy(session)
+                    await self._destroy(session)
                     await session.commit_transaction()
                 except Exception:
                     await session.abort_transaction()
@@ -542,10 +565,6 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
         """Create node architype."""
         self._jac_: NodeAnchor = NodeAnchor(obj=self)
         JacContext.try_set(self)
-
-    async def connect(self) -> "NodeArchitype":
-        """Return self."""
-        return self
 
     class Collection(ArchCollection["NodeArchitype"]):
         """Default NodeArchitype Collection."""
@@ -625,10 +644,10 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
         jctx: JacContext = JacContext.get_context()
         await jctx.populate_edges(edges)
         for edge in edges:
-            if ed := await edge.connect():
-                await ed.destroy(session)
+            if ed := await edge._connect():
+                await ed._destroy(session)
 
-    async def destroy(
+    async def _destroy(
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
         """Destroy NodeArchitype."""
@@ -644,7 +663,7 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
         else:
             await self.destroy_with_session()
 
-    async def save(
+    async def _save(
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> DocAnchor["NodeArchitype"]:
         """Upsert NodeArchitype."""
@@ -656,9 +675,9 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
                         jd.connected = True
                         jd.changes = {}
                         edges = [
-                            (await ed.save(session)).ref_id
+                            (await ed._save(session)).ref_id
                             for edge in self._jac_.edges
-                            if (ed := await edge.connect())
+                            if (ed := await edge._connect())
                         ]
                         await self.Collection.insert_one(
                             {**jd.json(), "edge": edges, **self.get_context()},
@@ -774,7 +793,7 @@ class Root(NodeArchitype, _Root):
             root=root_id,
             arch=root,
         )
-        return await root.save(session)
+        return await root._save(session)
 
     def get_context(self) -> dict:
         """Override context retrieval."""
@@ -814,10 +833,6 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
         self._jac_: EdgeAnchor = EdgeAnchor(obj=self)
         JacContext.try_set(self)
 
-    async def connect(self) -> "EdgeArchitype":
-        """Return self."""
-        return self
-
     class Collection(ArchCollection["EdgeArchitype"]):
         """Default EdgeArchitype Collection."""
 
@@ -842,7 +857,7 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
                 doc,
             )
 
-    async def destroy(
+    async def _destroy(
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
         """Destroy EdgeArchitype."""
@@ -853,8 +868,8 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
             if (jd := self._jac_doc_).connected and jd.current_access_level == 1:
                 try:
                     await ea.detach()
-                    await ea.source.save(session)  # type: ignore[union-attr]
-                    await ea.target.save(session)  # type: ignore[union-attr]
+                    await ea.source._save(session)  # type: ignore[union-attr]
+                    await ea.target._save(session)  # type: ignore[union-attr]
                     await self.Collection.delete_by_id(jd.id, session)
                     jd.connected = False
                 except Exception:
@@ -865,7 +880,7 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
         else:
             await self.destroy_with_session()
 
-    async def save(
+    async def _save(
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> DocAnchor["EdgeArchitype"]:
         """Upsert EdgeArchitype."""
@@ -879,8 +894,8 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
                         await self.Collection.insert_one(
                             {
                                 **jd.json(),
-                                "source": (await self._jac_.source.save(session)).ref_id,  # type: ignore[union-attr]
-                                "target": (await self._jac_.target.save(session)).ref_id,  # type: ignore[union-attr]
+                                "source": (await self._jac_.source._save(session)).ref_id,  # type: ignore[union-attr]
+                                "target": (await self._jac_.target._save(session)).ref_id,  # type: ignore[union-attr]
                                 "is_undirected": self._jac_.is_undirected,
                                 **self.get_context(),
                             },
@@ -929,14 +944,14 @@ class EdgeAnchor(_EdgeAnchor):
     async def reattach(self) -> None:
         """Reattach edge from nodes."""
         if isinstance(src := self.source, DocAnchor):
-            src = self.source = await src.connect()
+            src = self.source = await src._connect()
 
         if src:
             src._jac_.edges.append(self.obj)
             src.connect_edge(self.obj, True)
 
         if isinstance(tgt := self.target, DocAnchor):
-            tgt = self.target = await tgt.connect()
+            tgt = self.target = await tgt._connect()
 
         if tgt:
             tgt._jac_.edges.append(self.obj)
@@ -945,14 +960,14 @@ class EdgeAnchor(_EdgeAnchor):
     async def detach(self) -> None:
         """Detach edge from nodes."""
         if isinstance(src := self.source, DocAnchor):
-            src = self.source = await src.connect()
+            src = self.source = await src._connect()
 
         if src:
             src._jac_.edges.remove(self.obj)
             src.disconnect_edge(self.obj)
 
         if isinstance(tgt := self.target, DocAnchor):
-            tgt = self.target = await tgt.connect()
+            tgt = self.target = await tgt._connect()
 
         if tgt:
             tgt._jac_.edges.remove(self.obj)
@@ -1198,9 +1213,9 @@ class JacContext:
                 async with session.start_transaction():
                     try:
                         for arch in self.__del__.values():
-                            await arch.destroy(session)
+                            await arch._destroy(session)
                         for arch in self.__mem__.values():
-                            await arch.save(session)
+                            await arch._save(session)
                         await session.commit_transaction()
                     except Exception:
                         await session.abort_transaction()
@@ -1214,12 +1229,12 @@ async def async_filter(
     """Async filter for edges."""
     for edge in edges:
         if (
-            (ed := await edge.connect())
+            (ed := await edge._connect())
             and (edj := ed._jac_)
             and (edjs := edj.source)
             and (edjt := edj.target)
-            and (src := await edjs.connect())
-            and (tgt := await edjt.connect())
+            and (src := await edjs._connect())
+            and (tgt := await edjt._connect())
         ):
             yield (ed, src, tgt)
 

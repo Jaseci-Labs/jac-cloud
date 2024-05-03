@@ -21,7 +21,7 @@ class JacLangJaseciTests(IsolatedAsyncioTestCase):
         BaseCollection.__database__ = None
         self.client = BaseCollection.get_client()
         self.users = []
-        self.database = getenv("DATABASE_NAME", "jaclang-manual")
+        self.database = getenv("DATABASE_NAME", "jaclang")
         count = 0
         while True:
             if count > 5:

@@ -1,5 +1,6 @@
 """Graph Docs Plugin."""
 
+from asyncio import get_event_loop
 from dataclasses import fields
 from typing import Callable, Optional, Type, Union
 
@@ -58,7 +59,20 @@ class JacPlugin:
 
     @staticmethod
     @hookimpl
-    async def edge_ref(
+    def edge_ref(
+        node_obj: NodeArchitype | list[NodeArchitype],
+        target_obj: Optional[NodeArchitype | list[NodeArchitype]],
+        dir: EdgeDir,
+        filter_func: Optional[Callable[[list[EdgeArchitype]], list[EdgeArchitype]]],
+        edges_only: bool,
+    ) -> list[NodeArchitype] | list[EdgeArchitype]:
+        """Sync Jac's apply_dir stmt feature."""
+        return get_event_loop().run_until_complete(
+            JacPlugin._edge_ref(node_obj, target_obj, dir, filter_func, edges_only)
+        )
+
+    @staticmethod
+    async def _edge_ref(
         node_obj: NodeArchitype | list[NodeArchitype],
         target_obj: Optional[NodeArchitype | list[NodeArchitype]],
         dir: EdgeDir,
@@ -138,7 +152,7 @@ class JacPlugin:
                         and t in right
                         and await s.is_allowed(t, jctx)
                     ):
-                        await e.destroy()
+                        await e._destroy()
                         disconnect_occurred = True
                     if (
                         dir in [EdgeDir.IN, EdgeDir.ANY]
@@ -146,7 +160,7 @@ class JacPlugin:
                         and s in right
                         and await t.is_allowed(s, jctx)
                     ):
-                        await e.destroy()
+                        await e._destroy()
                         disconnect_occurred = True
         return disconnect_occurred
 
