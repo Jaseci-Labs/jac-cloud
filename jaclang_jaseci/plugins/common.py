@@ -327,7 +327,7 @@ class DocAnchor(Generic[DA]):
 
     async def connect(self, node: Optional["NodeArchitype"] = None) -> Optional[DA]:
         """Retrieve the Architype from db and return."""
-        jctx: JacContext = JCONTEXT.get()
+        jctx: JacContext = JacContext.get_context()
 
         if obj := jctx.get(self.id):
             self.arch = obj
@@ -389,7 +389,7 @@ class DocArchitype(Generic[DA]):
         if isinstance(jd := getattr(self, "__jac_doc__", None), DocAnchor):
             return jd
 
-        jctx: JacContext = JCONTEXT.get()
+        jctx: JacContext = JacContext.get_context()
         jd = self.__jac_doc__ = DocAnchor[DA](
             type=self._jac_type_,
             name=self.__class__.__name__,
@@ -484,7 +484,7 @@ class DocArchitype(Generic[DA]):
     async def is_allowed(self, to: DA, jctx: Optional["JacContext"] = None) -> bool:
         """Access validation."""
         if not jctx:
-            jctx = JCONTEXT.get()
+            jctx = JacContext.get_context()
         if (
             not jctx
             or not (from_jd := self._jac_doc_).connected
@@ -622,7 +622,7 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
     ) -> None:
         """Destroy all EdgeArchitypes."""
         edges = self._jac_.edges
-        jctx: JacContext = JCONTEXT.get()
+        jctx: JacContext = JacContext.get_context()
         await jctx.populate_edges(edges)
         for edge in edges:
             if ed := await edge.connect():
@@ -698,7 +698,7 @@ class NodeAnchor(_NodeAnchor):
         target_obj: Optional[list[NodeArchitype]],
     ) -> list["EdgeArchitype"]:
         """Get edges connected to this node."""
-        jctx: JacContext = JCONTEXT.get()
+        jctx: JacContext = JacContext.get_context()
         await jctx.populate_edges(self.edges)
 
         ret_edges: list[EdgeArchitype] = []
@@ -728,7 +728,7 @@ class NodeAnchor(_NodeAnchor):
         target_obj: Optional[list[NodeArchitype]],
     ) -> list[NodeArchitype]:
         """Get set of nodes connected to this node."""
-        jctx: JacContext = JCONTEXT.get()
+        jctx: JacContext = JacContext.get_context()
         await jctx.populate_edges(self.edges)
 
         ret_nodes: list[NodeArchitype] = []
@@ -1000,7 +1000,10 @@ class JacContext:
     """Jac Lang Context Handler."""
 
     def __init__(
-        self, request: Request, entry: Optional[str] = None, save_on_exit: bool = True
+        self,
+        request: Optional[Request] = None,
+        entry: Optional[str] = None,
+        save_on_exit: bool = True,
     ) -> None:
         """Create JacContext."""
         self.__mem__: dict[ObjectId, Union[NodeArchitype, EdgeArchitype]] = {}
@@ -1011,6 +1014,13 @@ class JacContext:
         self.reports: list[Any] = []
         self.entry = entry
         self.save_on_exit: bool = save_on_exit
+
+    @staticmethod
+    def get_context() -> "JacContext":
+        """Get or create JacContext."""
+        if not (jctx := JCONTEXT.get(None)):
+            JCONTEXT.set(jctx := JacContext())
+        return jctx
 
     def get_root_id(self) -> Optional[ObjectId]:
         """Retrieve Root Doc Id."""

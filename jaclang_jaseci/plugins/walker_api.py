@@ -156,7 +156,7 @@ class JacPlugin:
     @hookimpl
     def get_root() -> Architype:
         """Jac's assign comprehension feature."""
-        jctx: JacContext = JCONTEXT.get()
+        jctx: JacContext = JacContext.get_context()
         current_root = root
         if jctx:
             current_root = jctx.root
@@ -166,7 +166,7 @@ class JacPlugin:
     @hookimpl
     def report(expr: Any) -> Any:  # noqa: ANN401
         """Jac's report stmt feature."""
-        jctx: JacContext = JCONTEXT.get()
+        jctx: JacContext = JacContext.get_context()
         jctx.report(expr)
 
 

@@ -12,7 +12,6 @@ from .common import (
     EdgeArchitype,
     GenericEdge,
     JCLASS,
-    JCONTEXT,
     JType,
     JacContext,
     NodeArchitype,
@@ -127,7 +126,7 @@ class JacPlugin:
         left = [left] if isinstance(left, NodeArchitype) else left
         right = [right] if isinstance(right, NodeArchitype) else right
 
-        jctx: JacContext = JCONTEXT.get()
+        jctx: JacContext = JacContext.get_context()
         await jctx.populate_edges([edge for node in left for edge in node._jac_.edges])
 
         for i in left:
