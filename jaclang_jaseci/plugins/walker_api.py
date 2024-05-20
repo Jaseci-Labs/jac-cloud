@@ -1,5 +1,6 @@
 """Walker API Plugin."""
 
+from asyncio import get_event_loop
 from dataclasses import Field, _MISSING_TYPE, dataclass, is_dataclass
 from inspect import iscoroutine
 from pydoc import locate
@@ -143,7 +144,13 @@ class JacPlugin:
 
     @staticmethod
     @hookimpl
-    async def spawn_call(op1: Architype, op2: Architype) -> WalkerArchitype:
+    def spawn_call(op1: Architype, op2: Architype) -> WalkerArchitype:
+        """Jac's spawn operator feature."""
+        return get_event_loop().run_until_complete(JacPlugin._spawn_call(op1, op2))
+
+    @staticmethod
+    @hookimpl
+    async def _spawn_call(op1: Architype, op2: Architype) -> WalkerArchitype:
         """Jac's spawn operator feature."""
         if isinstance(op1, WalkerArchitype):
             return await op1._jac_.spawn_call(op2)
@@ -265,7 +272,7 @@ def populate_apis(cls: type) -> None:
             jctx = JacContext(request=request, entry=node)
             JCONTEXT.set(jctx)
 
-            wlk = cls(**body, **pl["query"], **pl["files"])._jac_
+            wlk: WalkerAnchor = cls(**body, **pl["query"], **pl["files"])._jac_
             await wlk.spawn_call(await jctx.get_entry())
             await jctx.clean_up()
             return ORJSONResponse(jctx.response(wlk.returns))

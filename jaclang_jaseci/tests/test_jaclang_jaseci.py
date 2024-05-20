@@ -397,3 +397,12 @@ class JacLangJaseciTests(IsolatedAsyncioTestCase):
         self.assertEqual(
             [], res["reports"][1]
         )  # proves that it wasn't able to access the node even it's connected
+
+        ############################################################
+        # ------------------ TEST NESTED WALKER ------------------ #
+        ############################################################
+
+        res = self.post_api("nested2")
+        self.assertEqual(
+            {"status": 200, "returns": [None], "reports": ["nested1", "nested2"]}, res
+        )

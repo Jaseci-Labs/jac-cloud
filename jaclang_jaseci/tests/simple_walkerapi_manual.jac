@@ -289,6 +289,29 @@ walker post_with_body_and_file {
     }
 }
 
+walker nested1 {
+    has sample: str = "";
+    can enter with `root entry {
+        self.sample = "nested1";
+    }
+
+    obj Specs {
+        static has auth: bool = False;
+    }
+}
+
+walker nested2 {
+    can enter with `root entry {
+        wlk = here spawn nested1();
+        report wlk.sample;
+        report "nested2";
+    }
+
+    obj Specs {
+        static has auth: bool = False;
+    }
+}
+
 with entry:__main__ {
 # SendGridEmailer.start();
 start();
