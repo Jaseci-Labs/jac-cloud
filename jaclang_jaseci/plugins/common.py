@@ -343,7 +343,10 @@ class DocAnchor(Generic[DA]):
             cls
             and (data := await cls.Collection.find_by_id(self.id))
             and isinstance(data, (NodeArchitype, EdgeArchitype))
-            and (jctx.root.is_allowed(data) or (node and node.is_allowed(data)))
+            and (
+                await jctx.root.is_allowed(data)
+                or (node and await node.is_allowed(data))
+            )
         ):
             self.arch = data
             jctx.set(data._jac_doc_.id, data)
@@ -484,7 +487,7 @@ class DocArchitype(Generic[DA]):
 
     def destroy(self, session: Optional[AsyncIOMotorClientSession] = None) -> None:
         """Sync Destroy Architype."""
-        get_event_loop().run_until_complete(self._save(session))
+        get_event_loop().run_until_complete(self._destroy(session))
 
     async def _destroy(
         self, session: Optional[AsyncIOMotorClientSession] = None

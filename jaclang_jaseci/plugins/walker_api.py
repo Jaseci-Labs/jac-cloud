@@ -3,6 +3,7 @@
 from asyncio import get_event_loop
 from dataclasses import Field, _MISSING_TYPE, dataclass, is_dataclass
 from inspect import iscoroutine
+from os import getenv
 from pydoc import locate
 from re import compile
 from typing import Any, Callable, Optional, Type, TypeVar, Union, cast
@@ -32,6 +33,7 @@ from ..utils import make_optional
 
 
 T = TypeVar("T")
+DISABLE_AUTO_ENDPOINT = getenv("DISABLE_AUTO_ENDPOINT") == "true"
 PATH_VARIABLE_REGEX = compile(r"{([^\}]+)}")
 FILE = {
     "File": UploadFile,
@@ -50,6 +52,7 @@ class DefaultSpecs:
     methods: list[str] = ["post"]
     as_query: Union[str, list[str]] = []
     auth: bool = True
+    private: bool = False
 
 
 @dataclass(eq=False)
@@ -181,7 +184,9 @@ def get_specs(cls: type) -> Optional[Type[DefaultSpecs]]:
     """Get Specs and inherit from DefaultSpecs."""
     specs = getattr(cls, "Specs", None)
     if specs is None:
-        return None
+        if DISABLE_AUTO_ENDPOINT:
+            return None
+        specs = DefaultSpecs
 
     if not issubclass(specs, DefaultSpecs):
         specs = type(specs.__name__, (specs, DefaultSpecs), {})
@@ -203,7 +208,7 @@ def gen_model_field(cls: type, field: Field, is_file: bool = False) -> tuple[typ
 
 def populate_apis(cls: type) -> None:
     """Generate FastAPI endpoint based on WalkerArchitype class."""
-    if specs := get_specs(cls):
+    if (specs := get_specs(cls)) and not specs.private:
         path: str = specs.path or ""
         methods: list = specs.methods or []
         as_query: Union[str, list] = specs.as_query or []

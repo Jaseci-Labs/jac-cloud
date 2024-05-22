@@ -193,8 +193,6 @@ walker post_no_body {}
 
 walker post_with_body {
     has a: str;
-
-    obj Specs {}
 }
 
 walker get_no_body {
@@ -296,7 +294,7 @@ walker nested1 {
     }
 
     obj Specs {
-        static has auth: bool = False;
+        static has private: bool = True;
     }
 }
 

@@ -3234,104 +3234,6 @@
                 }
             }
         },
-        "/walker/nested1": {
-            "post": {
-                "tags": [
-                    "walker",
-                    "walker"
-                ],
-                "summary": "/nested1",
-                "operationId": "api_root_walker_nested1_post",
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/nested1_body_model"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "responses": {
-                    "200": {
-                        "description": "Successful Response",
-                        "content": {
-                            "application/json": {
-                                "schema": {}
-                            }
-                        }
-                    },
-                    "422": {
-                        "description": "Validation Error",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/HTTPValidationError"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/walker/nested1/{node}": {
-            "post": {
-                "tags": [
-                    "walker",
-                    "walker"
-                ],
-                "summary": "/nested1/{node}",
-                "operationId": "api_entry_walker_nested1__node__post",
-                "parameters": [
-                    {
-                        "name": "node",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Node"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/nested1_body_model"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Successful Response",
-                        "content": {
-                            "application/json": {
-                                "schema": {}
-                            }
-                        }
-                    },
-                    "422": {
-                        "description": "Validation Error",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/HTTPValidationError"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/walker/nested2": {
             "post": {
                 "tags": [
@@ -3774,23 +3676,6 @@
                 },
                 "type": "object",
                 "title": "disallow_other_body_model"
-            },
-            "nested1_body_model": {
-                "properties": {
-                    "sample": {
-                        "anyOf": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Sample"
-                    }
-                },
-                "type": "object",
-                "title": "nested1_body_model"
             },
             "post_with_body_body_model": {
                 "properties": {
