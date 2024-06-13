@@ -278,7 +278,7 @@ def populate_apis(cls: type) -> None:
             wlk: WalkerAnchor = cls(**body, **pl["query"], **pl["files"])._jac_
             await wlk.spawn_call(await jctx.get_entry())
             await jctx.clean_up()
-            return ORJSONResponse(jctx.response(wlk.returns))
+            return ORJSONResponse(jctx.response())
 
         async def api_root(
             request: Request,
