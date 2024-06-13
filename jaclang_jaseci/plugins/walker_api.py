@@ -16,7 +16,6 @@ from jaclang.core.construct import (
     DSFunc,
     WalkerAnchor as _WalkerAnchor,
     WalkerArchitype as _WalkerArchitype,
-    root,
 )
 from jaclang.plugin.default import hookimpl
 from jaclang.plugin.feature import JacFeature as Jac
@@ -167,7 +166,6 @@ class JacPlugin:
     def get_root() -> Architype:
         """Jac's assign comprehension feature."""
         jctx: JacContext = JacContext.get_context()
-        current_root = root
         if jctx:
             current_root = jctx.root
         return current_root
