@@ -1177,7 +1177,8 @@ class JacContext:
 
     def response(self, returns: list[Any], status: int = 200) -> dict[str, Any]:
         """Return serialized version of reports."""
-        resp = {"status": status, "returns": returns}
+        # resp = {"status": status, "returns": returns}
+        resp = {"status": status}
 
         if self.reports:
             for key, val in enumerate(self.reports):

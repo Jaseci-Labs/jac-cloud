@@ -12,7 +12,7 @@ setup(
     version=VERSION,
     packages=find_packages(include=["jaclang_jaseci", "jaclang_jaseci.*"]),
     install_requires=[
-        "jaclang==0.5.18",
+        "jaclang==0.7.1",
         "fastapi==0.109.0",
         "pydantic==2.6.0",
         "pymongo==4.6.1",
