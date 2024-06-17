@@ -35,7 +35,7 @@ class JacLangJaseciTests(IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         """Clean up DB."""
-        # await self.client.drop_database(self.database)
+        await self.client.drop_database(self.database)
 
     def create_test_user(self, suffix: str = "") -> None:
         """Call openapi specs json."""

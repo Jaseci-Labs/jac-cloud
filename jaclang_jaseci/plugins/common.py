@@ -5,6 +5,7 @@ from contextvars import ContextVar
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, is_dataclass
 from enum import Enum
+from os import getenv
 from re import IGNORECASE, compile
 from typing import (
     Any,
@@ -43,6 +44,7 @@ from ..collections import BaseCollection
 from ..utils import logger
 
 
+SHOW_ENDPOINT_RETURNS = getenv("SHOW_ENDPOINT_RETURNS") == "true"
 TARGET_NODE_REGEX = compile(r"^(n|e):([^:]*):([a-f\d]{24})$", IGNORECASE)
 JCONTEXT: ContextVar = ContextVar("JCONTEXT")
 T = TypeVar("T")
@@ -513,8 +515,8 @@ class DocArchitype(Generic[DA]):
             jctx = JacContext.get_context()
         if (
             not jctx
-            or not (from_jd := self._jac_doc_).connected
-            or not (to_jd := to._jac_doc_).connected
+            or not (from_jd := self._jac_doc_)
+            or not (to_jd := to._jac_doc_)
             or not (from_root := from_jd.root)
             or not (to_root := to_jd.root)
         ):
@@ -655,6 +657,7 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
     ) -> None:
         """Destroy NodeArchitype."""
         if self._jac_auto_save_:
+            await self.destroy_edges()
             return JacContext.try_destroy(self)
         if session:
             if (jd := self._jac_doc_).connected and jd.current_access_level == 1:
@@ -865,6 +868,7 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
     ) -> None:
         """Destroy EdgeArchitype."""
         if self._jac_auto_save_:
+            await self._jac_.detach()
             return JacContext.try_destroy(self)
         if session:
             ea = self._jac_
@@ -965,15 +969,15 @@ class EdgeAnchor(_EdgeAnchor):
         if isinstance(src := self.source, DocAnchor):
             src = self.source = await src._connect()
 
-        if src:
-            src._jac_.edges.remove(self.obj)
+        if src and self.obj in (ses := src._jac_.edges):
+            ses.remove(self.obj)
             src.disconnect_edge(self.obj)
 
         if isinstance(tgt := self.target, DocAnchor):
             tgt = self.target = await tgt._connect()
 
-        if tgt:
-            tgt._jac_.edges.remove(self.obj)
+        if tgt and self.obj in (tes := tgt._jac_.edges):
+            tes.remove(self.obj)
             tgt.disconnect_edge(self.obj)
 
 
@@ -1175,9 +1179,9 @@ class JacContext:
         """Append report."""
         self.reports.append(obj)
 
-    def response(self, status: int = 200) -> dict[str, Any]:
+    def response(self, returns: list[Any], status: int = 200) -> dict[str, Any]:
         """Return serialized version of reports."""
-        resp = {"status": status}
+        resp = {"status": status, "returns": returns}
 
         if self.reports:
             for key, val in enumerate(self.reports):
@@ -1188,6 +1192,9 @@ class JacContext:
                 else:
                     self.clean_response(key, val, self.reports)
             resp["reports"] = self.reports
+
+        if not SHOW_ENDPOINT_RETURNS:
+            resp.pop("returns")
 
         return resp
 
