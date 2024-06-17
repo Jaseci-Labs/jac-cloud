@@ -44,7 +44,7 @@ from ..collections import BaseCollection
 from ..utils import logger
 
 
-SHOW_ENDPOINT_RETURNS = getenv("SHOW_ENDPOINT_RETURNS") == "true"
+SHOW_ENDPOINT_RETURNS = getenv("SHOW_ENDPOINT_RETURNS", False)
 TARGET_NODE_REGEX = compile(r"^(n|e):([^:]*):([a-f\d]{24})$", IGNORECASE)
 JCONTEXT: ContextVar = ContextVar("JCONTEXT")
 T = TypeVar("T")
