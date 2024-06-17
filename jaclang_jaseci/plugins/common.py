@@ -1175,9 +1175,9 @@ class JacContext:
         """Append report."""
         self.reports.append(obj)
 
-    def response(self, returns: list[Any], status: int = 200) -> dict[str, Any]:
+    def response(self, status: int = 200) -> dict[str, Any]:
         """Return serialized version of reports."""
-        resp = {"status": status, "returns": returns}
+        resp = {"status": status}
 
         if self.reports:
             for key, val in enumerate(self.reports):
