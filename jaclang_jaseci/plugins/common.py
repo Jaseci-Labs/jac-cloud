@@ -216,6 +216,7 @@ class DocAnchor(Generic[DA]):
 
     def connect_edge(self, doc_anc: "DocAnchor[DA]", rollback: bool = False) -> None:
         """Push update that there's newly added edge."""
+        print("===in DocAnchor connect_edge===")
         if not rollback:
             self._add_to_set("edge", doc_anc)
         else:
@@ -332,6 +333,7 @@ class DocAnchor(Generic[DA]):
 
     async def _connect(self, node: Optional["NodeArchitype"] = None) -> Optional[DA]:
         """Retrieve the Architype from db and return."""
+        print("===in DocAnchor connect===")
         jctx: JacContext = JacContext.get_context()
 
         if obj := jctx.get(self.id):
@@ -455,6 +457,7 @@ class DocArchitype(Generic[DA]):
 
     def connect(self: DA) -> "DA":
         """Sync Return self."""
+        print("===in DocArchitype connect===")
         return get_event_loop().run_until_complete(self._connect())
 
     async def _connect(self: DA) -> "DA":
@@ -595,6 +598,7 @@ class NodeArchitype(_NodeArchitype, DocArchitype["NodeArchitype"]):
 
     def connect_edge(self, edge: "EdgeArchitype", rollback: bool = False) -> None:
         """Update DocAnchor that there's newly added edge."""
+        print("===in NodeArchitype connect_edge===")
         self._jac_doc_.connect_edge(edge._jac_doc_, rollback)
 
     def disconnect_edge(self, edge: "EdgeArchitype") -> None:
@@ -1177,6 +1181,7 @@ class JacContext:
 
     def response(self, status: int = 200) -> dict[str, Any]:
         """Return serialized version of reports."""
+        # resp = {"status": status, "returns": returns}
         resp = {"status": status}
 
         if self.reports:
