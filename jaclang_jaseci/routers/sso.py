@@ -69,7 +69,7 @@ for platform, cls in SUPPORTED_PLATFORMS.items():
             options["tenant"] = tenant
 
         if allow_insecure_http := getenv(f"{platform}_ALLOW_INSECURE_HTTP"):
-            options["allow_insecure_http"] = allow_insecure_http == "True"
+            options["allow_insecure_http"] = allow_insecure_http == "true"
 
         SSO[platform.lower()] = cls(**options)
 
@@ -110,12 +110,22 @@ async def sso_callback(request: Request, platform: str, operation: str) -> Respo
 @router.post("/attach", dependencies=authenticator)
 async def sso_attach(request: Request, attach_sso: AttachSSO) -> ORJSONResponse:  # type: ignore
     """Generate token from user."""
-    if SUPPORTED_PLATFORMS.get(attach_sso.platform.upper()):
+    if SSO.get(attach_sso.platform):
+        if await User.Collection.find_one(
+            {
+                "$or": [
+                    {f"sso.{platform}.id": attach_sso.id},
+                    {f"sso.{platform}.email": attach_sso.email},
+                ]
+            }
+        ):
+            return ORJSONResponse({"message": "Already Attached!"}, 403)
+
         await User.Collection.update_one(
             {"_id": ObjectId(request.auth_user.id)},
             {
                 "$set": {
-                    f"sso.{attach_sso.platform.lower()}": {
+                    f"sso.{attach_sso.platform}": {
                         "id": attach_sso.id,
                         "email": attach_sso.email,
                     }
@@ -130,10 +140,10 @@ async def sso_attach(request: Request, attach_sso: AttachSSO) -> ORJSONResponse:
 @router.delete("/detach", dependencies=authenticator)
 async def sso_detach(request: Request, detach_sso: DetachSSO) -> ORJSONResponse:  # type: ignore
     """Generate token from user."""
-    if SUPPORTED_PLATFORMS.get(detach_sso.platform.upper()):
+    if SSO.get(detach_sso.platform):
         await User.Collection.update_one(
             {"_id": ObjectId(request.auth_user.id)},
-            {"$unset": {f"sso.{detach_sso.platform.lower()}": 1}},
+            {"$unset": {f"sso.{detach_sso.platform}": 1}},
         )
         return ORJSONResponse({"message": "Successfully Updated SSO!"}, 200)
     return ORJSONResponse({"message": "Feature not yet implemented!"}, 501)
@@ -192,7 +202,7 @@ async def register(request: Request, platform: str, open_id: OpenID) -> Response
             try:
                 root = await Root.register(session=session)
                 ureq: dict[str, object] = User.register_type()(
-                    email=open_id.email,
+                    email=f"{root.id}-sso@jac-lang.org",
                     password=NULL_BYTES,
                     **User.sso_mapper(open_id),
                 ).obfuscate()
