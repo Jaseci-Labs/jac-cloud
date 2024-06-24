@@ -28,6 +28,212 @@
                 }
             }
         },
+        "/sso/{platform}/{operation}": {
+            "get": {
+                "tags": [
+                    "sso"
+                ],
+                "summary": "Sso Operation",
+                "description": "SSO Login API.",
+                "operationId": "sso_operation_sso__platform___operation__get",
+                "parameters": [
+                    {
+                        "name": "platform",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Platform"
+                        }
+                    },
+                    {
+                        "name": "operation",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Operation"
+                        }
+                    },
+                    {
+                        "name": "redirect_uri",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Redirect Uri"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sso/{platform}/{operation}/callback": {
+            "get": {
+                "tags": [
+                    "sso"
+                ],
+                "summary": "Sso Callback",
+                "description": "SSO Login API.",
+                "operationId": "sso_callback_sso__platform___operation__callback_get",
+                "parameters": [
+                    {
+                        "name": "platform",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Platform"
+                        }
+                    },
+                    {
+                        "name": "operation",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Operation"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sso/attach": {
+            "post": {
+                "tags": [
+                    "sso"
+                ],
+                "summary": "Sso Attach",
+                "description": "Generate token from user.",
+                "operationId": "sso_attach_sso_attach_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AttachSSO"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ]
+            }
+        },
+        "/sso/detach": {
+            "delete": {
+                "tags": [
+                    "sso"
+                ],
+                "summary": "Sso Detach",
+                "description": "Generate token from user.",
+                "operationId": "sso_detach_sso_detach_delete",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DetachSSO"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ]
+            }
+        },
         "/user/register": {
             "post": {
                 "tags": [
@@ -3305,6 +3511,30 @@
     },
     "components": {
         "schemas": {
+            "AttachSSO": {
+                "properties": {
+                    "platform": {
+                        "type": "string",
+                        "title": "Platform"
+                    },
+                    "id": {
+                        "type": "string",
+                        "title": "Id"
+                    },
+                    "email": {
+                        "type": "string",
+                        "title": "Email"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "platform",
+                    "id",
+                    "email"
+                ],
+                "title": "AttachSSO",
+                "description": "Attach SSO Request Model."
+            },
             "Body_api_entry_walker_post_with_body_and_file__node__post": {
                 "properties": {
                     "body": {
@@ -3462,6 +3692,20 @@
                     "multiple"
                 ],
                 "title": "Body_api_root_walker_post_with_file_post"
+            },
+            "DetachSSO": {
+                "properties": {
+                    "platform": {
+                        "type": "string",
+                        "title": "Platform"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "platform"
+                ],
+                "title": "DetachSSO",
+                "description": "Attach SSO Request Model."
             },
             "HTTPValidationError": {
                 "properties": {

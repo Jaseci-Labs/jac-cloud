@@ -2,9 +2,11 @@
 
 from typing import Any, Mapping, Type, Union, cast
 
+from fastapi_sso import OpenID
+
 from passlib.hash import pbkdf2_sha512
 
-from pydantic import BaseModel, EmailStr, create_model
+from pydantic import BaseModel, EmailStr, Field, create_model
 from pydantic.fields import FieldInfo
 
 from ..collections.user import UserCollection
@@ -37,6 +39,7 @@ class User(UserCommon):
     password: bytes
     root_id: str
     is_activated: bool = False
+    sso: dict[str, dict[str, str]] = Field(default_factory=dict)
 
     class Collection(UserCollection["User"]):
         """UserCollection Integration."""
@@ -79,6 +82,7 @@ class User(UserCommon):
         user_model.pop("id", None)
         user_model.pop("root_id", None)
         user_model.pop("is_activated", None)
+        user_model.pop("sso", None)
 
         return create_model("UserRegister", __base__=UserCommon, **user_model)
 
@@ -86,3 +90,8 @@ class User(UserCommon):
     def send_verification_code(code: str, email: str) -> None:
         """Send verification code."""
         pass
+
+    @staticmethod
+    def sso_mapper(open_id: OpenID) -> dict[str, object]:
+        """Send verification code."""
+        return {}

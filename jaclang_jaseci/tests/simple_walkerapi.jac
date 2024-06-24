@@ -28,6 +28,13 @@ class User(BaseUser):
         """Send verification code."""
         SendGridEmailer.send_verification_code(code, email)
 
+    @staticmethod
+    def sso_mapper(open_id) -> dict[str, object]:
+        """Send verification code."""
+        return {
+            "name": f"{open_id.first_name} {open_id.last_name}"
+        }
+
 ::py::
 
 node boy {
