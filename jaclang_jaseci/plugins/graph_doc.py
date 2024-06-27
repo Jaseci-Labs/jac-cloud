@@ -129,7 +129,18 @@ class JacPlugin:
 
     @staticmethod
     @hookimpl
-    async def disconnect(
+    def disconnect(
+        left: NodeArchitype | list[NodeArchitype],
+        right: NodeArchitype | list[NodeArchitype],
+        dir: EdgeDir,
+        filter_func: Optional[Callable[[list[EdgeArchitype]], list[EdgeArchitype]]],
+    ) -> bool:  # noqa: ANN401
+        return get_event_loop().run_until_complete(
+            JacPlugin._disconnect(left, right, dir, filter_func)
+        )
+
+    @staticmethod
+    async def _disconnect(
         left: NodeArchitype | list[NodeArchitype],
         right: NodeArchitype | list[NodeArchitype],
         dir: EdgeDir,
