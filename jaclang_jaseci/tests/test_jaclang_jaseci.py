@@ -161,6 +161,35 @@ class JacLangJaseciTests(IsolatedAsyncioTestCase):
         self.assertTrue(report["id"].startswith("n:girl:"))
         self.assertEqual({"val": "new"}, report["context"])
 
+        res = self.post_api("delete_sample_graph")
+        self.assertEqual(200, res["status"])
+        self.assertEqual([None, None], res["returns"])
+
+        reports = res["reports"]
+        report = reports[0]
+        self.assertTrue(report["id"].startswith("n:girl:"))
+        self.assertEqual({"val": "new"}, report["context"])
+
+        report = reports[1]
+        self.assertTrue(report["id"].startswith("n:girl:"))
+        self.assertEqual({"val": "latest"}, report["context"])
+
+        res = self.post_api("visit_sample_graph")
+        self.assertEqual(200, res["status"])
+        self.assertEqual([1, 2, 3], res["returns"])
+
+        reports = res["reports"]
+        report = reports[0]
+        self.assertTrue(report["id"].startswith("n::"))
+
+        report = reports[1]
+        self.assertTrue(report["id"].startswith("n:boy:"))
+        self.assertEqual({"val1": "a", "val2": "b"}, report["context"])
+
+        report = reports[2]
+        self.assertTrue(report["id"].startswith("n:girl:"))
+        self.assertEqual({"val": "latest"}, report["context"])
+
         res = self.post_api("create_list_field")
         self.assertEqual(200, res["status"])
         self.assertEqual([None], res["returns"])

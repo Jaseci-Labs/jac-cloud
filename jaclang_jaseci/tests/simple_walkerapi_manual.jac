@@ -105,6 +105,27 @@ walker update_sample_graph {
     obj Specs {}
 }
 
+walker delete_sample_graph {
+    can enter1 with `root entry {
+        boys = [-->];
+        visit boys;
+    }
+
+    can enter2 with boy entry {
+        old = [-->];
+        report old[0];
+
+        new = girl(val="latest");
+        here ++> new;
+
+        old[0].destroy();
+
+        report ([-->])[0];
+    }
+
+    obj Specs {}
+}
+
 walker create_list_field {
     can enter1 with `root entry {
         JCONTEXT.get().save_on_exit = False;
