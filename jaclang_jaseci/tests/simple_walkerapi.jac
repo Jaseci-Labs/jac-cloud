@@ -108,7 +108,7 @@ walker update_sample_graph {
         new = girl(val="new");
         here ++> new;
 
-        old[0].destroy();
+        here del--> old[0];
 
         report ([-->])[0];
     }

@@ -99,7 +99,7 @@ walker update_sample_graph {
         new = girl(val="new");
         here ++> new;
         new.save();
-        old[0].destroy();
+        here del--> old[0];
         report ([-->])[0];
     }
     obj Specs {}

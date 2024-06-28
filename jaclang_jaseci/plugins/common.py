@@ -509,7 +509,9 @@ class DocArchitype(Generic[DA]):
                     logger.exception(f"Error destroying {self._jac_type_.name}!")
                     raise
 
-    async def is_allowed(self, to: DA, jctx: Optional["JacContext"] = None) -> bool:
+    async def is_allowed(
+        self, to: "DocArchitype", jctx: Optional["JacContext"] = None
+    ) -> bool:
         """Access validation."""
         if not jctx:
             jctx = JacContext.get_context()
@@ -733,6 +735,7 @@ class NodeAnchor(_NodeAnchor):
                     dir in [EdgeDir.OUT, EdgeDir.ANY]
                     and self.obj == s
                     and (not target_obj or t.__class__ in target_obj)
+                    and await s.is_allowed(e, jctx)
                     and await s.is_allowed(t, jctx)
                 ):
                     ret_edges.append(e)
@@ -740,6 +743,7 @@ class NodeAnchor(_NodeAnchor):
                     dir in [EdgeDir.IN, EdgeDir.ANY]
                     and self.obj == t
                     and (not target_obj or s.__class__ in target_obj)
+                    and await t.is_allowed(e, jctx)
                     and await t.is_allowed(s, jctx)
                 ):
                     ret_edges.append(e)
@@ -763,6 +767,7 @@ class NodeAnchor(_NodeAnchor):
                     dir in [EdgeDir.OUT, EdgeDir.ANY]
                     and self.obj == s
                     and (not target_obj or t.__class__ in target_obj)
+                    and await s.is_allowed(e, jctx)
                     and await s.is_allowed(t, jctx)
                 ):
                     ret_nodes.append(t)
@@ -770,6 +775,7 @@ class NodeAnchor(_NodeAnchor):
                     dir in [EdgeDir.IN, EdgeDir.ANY]
                     and self.obj == t
                     and (not target_obj or s.__class__ in target_obj)
+                    and await t.is_allowed(e, jctx)
                     and await t.is_allowed(s, jctx)
                 ):
                     ret_nodes.append(s)

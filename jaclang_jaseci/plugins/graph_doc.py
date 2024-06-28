@@ -135,6 +135,7 @@ class JacPlugin:
         dir: EdgeDir,
         filter_func: Optional[Callable[[list[EdgeArchitype]], list[EdgeArchitype]]],
     ) -> bool:  # noqa: ANN401
+        """Sync Jac's disconnect operator feature."""
         return get_event_loop().run_until_complete(
             JacPlugin._disconnect(left, right, dir, filter_func)
         )
@@ -158,17 +159,19 @@ class JacPlugin:
             async for e, s, t in async_filter(i._jac_.edges):
                 if not filter_func or filter_func([e]):
                     if (
-                        dir in [EdgeDir.OUT, EdgeDir.ANY]
+                        dir in ["OUT", "ANY"]
                         and i == s
                         and t in right
+                        and await s.is_allowed(e, jctx)
                         and await s.is_allowed(t, jctx)
                     ):
                         await e._destroy()
                         disconnect_occurred = True
                     if (
-                        dir in [EdgeDir.IN, EdgeDir.ANY]
+                        dir in ["IN", "ANY"]
                         and i == t
                         and s in right
+                        and await t.is_allowed(e, jctx)
                         and await t.is_allowed(s, jctx)
                     ):
                         await e._destroy()
