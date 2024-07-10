@@ -25,6 +25,8 @@ from jaclang.core.architype import (
 )
 from jaclang.core.utils import collect_node_connections
 
+from .collection import Collection
+
 
 GENERIC_ID_REGEX = compile(r"^(g|n|e|w):([^:]*):([a-f\d]{24})$", IGNORECASE)
 NODE_ID_REGEX = compile(r"^n:([^:]*):([a-f\d]{24})$", IGNORECASE)
@@ -459,6 +461,9 @@ class WalkerAnchor(ObjectAnchor):
 
 class Architype(_Architype):
     """Architype Protocol."""
+
+    class __collection__(Collection["Architype"]):  # noqa: N801
+        pass
 
     __jac__: ObjectAnchor
 
