@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from inspect import iscoroutine
 from pickle import dumps
 from re import IGNORECASE, compile
 from typing import (
+    Any,
     Callable,
     Iterable,
     Optional,
@@ -61,6 +63,23 @@ class ObjectAnchor(_ObjectAnchor):
                     pass
             return cls(name=matched.group(2), id=ObjectId(matched.group(3)))
         return None
+
+    def sync(self, node: Optional["NodeAnchor"] = None) -> Optional[Architype]:
+        """Retrieve the Architype from db and return."""
+        if architype := self.architype:
+            if (node or self).has_read_access(self):
+                return architype
+            return None
+
+        from jaclang.core.context import ExecutionContext
+
+        jsrc = ExecutionContext.get().datasource
+        anchor = jsrc.find_one(self.id)
+
+        if anchor and (node or self).has_read_access(anchor):
+            self.__dict__.update(anchor.__dict__)
+
+        return self.architype
 
 
 @dataclass(eq=False)
@@ -218,9 +237,9 @@ class NodeAnchor(ObjectAnchor):
                 f.write(dot_content + "}")
         return dot_content + "}"
 
-    def spawn_call(self, walk: WalkerAnchor) -> WalkerArchitype:
+    async def spawn_call(self, walk: WalkerAnchor) -> WalkerArchitype:
         """Invoke data spatial call."""
-        return walk.spawn_call(self)
+        return await walk.spawn_call(self)
 
     def serialize(self) -> dict[str, object]:
         """Serialize Node Anchor."""
@@ -316,10 +335,10 @@ class EdgeAnchor(ObjectAnchor):
         self.source = None
         self.target = None
 
-    def spawn_call(self, walk: WalkerAnchor) -> WalkerArchitype:
+    async def spawn_call(self, walk: WalkerAnchor) -> WalkerArchitype:
         """Invoke data spatial call."""
         if target := self.target:
-            return walk.spawn_call(target)
+            return await walk.spawn_call(target)
         else:
             raise ValueError("Edge has no target.")
 
@@ -340,6 +359,7 @@ class WalkerAnchor(ObjectAnchor):
     architype: Optional[WalkerArchitype] = None
     path: list[ObjectAnchor] = field(default_factory=list)
     next: list[ObjectAnchor] = field(default_factory=list)
+    returns: list[Any] = field(default_factory=list)
     ignores: list[ObjectAnchor] = field(default_factory=list)
     disengaged: bool = False
     persistent: bool = False  # Disabled initially but can be adjusted
@@ -415,17 +435,27 @@ class WalkerAnchor(ObjectAnchor):
         """Disengage walker from traversal."""
         self.disengaged = True
 
-    def spawn_call(self, nd: ObjectAnchor) -> WalkerArchitype:
+    async def await_if_coroutine(self, ret: Any) -> Any:  # noqa: ANN401
+        """Await return if it's a coroutine."""
+        if iscoroutine(ret):
+            ret = await ret
+
+        self.returns.append(ret)
+
+        return ret
+
+    async def spawn_call(self, nd: ObjectAnchor) -> WalkerArchitype:
         """Invoke data spatial call."""
         if walker := self.sync():
             self.path = []
             self.next = [nd]
+            self.returns = []
             while len(self.next):
                 if node := self.next.pop(0).sync():
                     for i in node._jac_entry_funcs_:
                         if not i.trigger or isinstance(walker, i.trigger):
                             if i.func:
-                                i.func(node, walker)
+                                await self.await_if_coroutine(i.func(node, walker))
                             else:
                                 raise ValueError(f"No function {i.name} to call.")
                         if self.disengaged:
@@ -433,7 +463,7 @@ class WalkerAnchor(ObjectAnchor):
                     for i in walker._jac_entry_funcs_:
                         if not i.trigger or isinstance(node, i.trigger):
                             if i.func:
-                                i.func(walker, node)
+                                await self.await_if_coroutine(i.func(walker, node))
                             else:
                                 raise ValueError(f"No function {i.name} to call.")
                         if self.disengaged:
@@ -441,7 +471,7 @@ class WalkerAnchor(ObjectAnchor):
                     for i in walker._jac_exit_funcs_:
                         if not i.trigger or isinstance(node, i.trigger):
                             if i.func:
-                                i.func(walker, node)
+                                await self.await_if_coroutine(i.func(walker, node))
                             else:
                                 raise ValueError(f"No function {i.name} to call.")
                         if self.disengaged:
@@ -449,7 +479,7 @@ class WalkerAnchor(ObjectAnchor):
                     for i in node._jac_exit_funcs_:
                         if not i.trigger or isinstance(walker, i.trigger):
                             if i.func:
-                                i.func(node, walker)
+                                await self.await_if_coroutine(i.func(node, walker))
                             else:
                                 raise ValueError(f"No function {i.name} to call.")
                         if self.disengaged:
