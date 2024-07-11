@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from os import getenv
-from typing import Any, Callable, Optional, TypedDict, Union, cast
+from typing import Any, Callable, Optional, Union, cast
 
 from bson import ObjectId
 
@@ -15,16 +15,10 @@ from jaclang.core.memory import Memory
 
 from .architype import NodeAnchor, Root
 
-SHOW_ENDPOINT_RETURNS = getenv("SHOW_ENDPOINT_RETURNS", False)
+SHOW_ENDPOINT_RETURNS = getenv("SHOW_ENDPOINT_RETURNS") == "true"
 EXECUTION_CONTEXT = ContextVar[Optional["ExecutionContext"]]("ExecutionContext")
 SUPER_ROOT = ObjectId("000000000000000000000000")
 PUBLIC_ROOT = ObjectId("000000000000000000000001")
-
-
-class ContextOptions(TypedDict, total=False):
-    """Execution Context Options."""
-
-    entry: Optional[NodeAnchor]
 
 
 class ExecutionContext:
@@ -34,6 +28,7 @@ class ExecutionContext:
         self,
         request: Optional[Request] = None,
         entry: Optional[NodeAnchor] = None,
+        **ignored: Any,  # noqa: ANN401
     ) -> None:
         """Create JacContext."""
         self.datasource: Memory = Memory()

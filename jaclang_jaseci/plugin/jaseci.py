@@ -143,7 +143,9 @@ def populate_apis(cls: type) -> None:
                     body = body_model(**body).model_dump()
                 except ValidationError as e:
                     return ORJSONResponse({"detail": e.errors()})
+            import pdb
 
+            pdb.set_trace()
             jctx = ExecutionContext.get({"request": request, "entry": node})
 
             wlk: WalkerAnchor = cls(**body, **pl["query"], **pl["files"]).__jac__
@@ -362,6 +364,7 @@ class JacPlugin:
     @hookimpl
     def report(expr: Any) -> Any:  # noqa: ANN401
         """Jac's report stmt feature."""
+        ExecutionContext.get().reports.append(expr)
 
     @staticmethod
     @hookimpl
