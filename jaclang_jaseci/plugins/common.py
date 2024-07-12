@@ -124,7 +124,7 @@ class DocAccess:
     @staticmethod
     def from_json(access: dict[str, Any]) -> "DocAccess":
         """Convert dict to DocAccess."""
-        all = bool(access.get("all"))
+        all = cast(int, access.get("all"))
         nodes = cast(list[list[ObjectId]], access.get("nodes") or [[], []])
         roots = cast(list[list[ObjectId]], access.get("roots") or [[], []])
 
