@@ -32,7 +32,7 @@ from ..core.architype import (
     WalkerAnchor,
     WalkerArchitype,
 )
-from ..core.context import ExecutionContext
+from ..core.context import JaseciContext
 from ..core.security import authenticator
 from ..core.utils import make_optional
 
@@ -143,10 +143,8 @@ def populate_apis(cls: type) -> None:
                     body = body_model(**body).model_dump()
                 except ValidationError as e:
                     return ORJSONResponse({"detail": e.errors()})
-            import pdb
 
-            pdb.set_trace()
-            jctx = ExecutionContext.get({"request": request, "entry": node})
+            jctx = JaseciContext.get({"request": request, "entry": node})
 
             wlk: WalkerAnchor = cls(**body, **pl["query"], **pl["files"]).__jac__
             await wlk.spawn_call(jctx.entry)
@@ -225,13 +223,13 @@ class DefaultSpecs:
 
 
 class JacPlugin:
-    """Jac Feature."""
+    """Jaseci Implementations."""
 
     @staticmethod
     @hookimpl
-    def context(options: Optional[dict[str, Any]]) -> ExecutionContext:
+    def context(options: Optional[dict[str, Any]]) -> JaseciContext:
         """Get the execution context."""
-        return ExecutionContext.get(options)
+        return JaseciContext.get(options)
 
     @staticmethod
     @hookimpl
@@ -364,7 +362,7 @@ class JacPlugin:
     @hookimpl
     def report(expr: Any) -> Any:  # noqa: ANN401
         """Jac's report stmt feature."""
-        ExecutionContext.get().reports.append(expr)
+        JaseciContext.get().reports.append(expr)
 
     @staticmethod
     @hookimpl
@@ -510,7 +508,7 @@ class JacPlugin:
     @hookimpl
     def get_root() -> Root:
         """Jac's assign comprehension feature."""
-        if architype := Jac.context().root.sync():
+        if architype := JaseciContext.get().root.sync():
             return cast(Root, architype)
         raise Exception("No Available Root!")
 
@@ -542,3 +540,14 @@ class JacPlugin:
             return edge
 
         return builder
+
+
+##########################################################
+#               NEED TO TRANSFER TO PLUGIN               #
+##########################################################
+
+Jac.RootType = Root  # type: ignore[assignment]
+Jac.Obj = Architype  # type: ignore[assignment]
+Jac.Node = NodeArchitype  # type: ignore[assignment]
+Jac.Edge = EdgeArchitype  # type: ignore[assignment]
+Jac.Walker = WalkerArchitype  # type: ignore[assignment]

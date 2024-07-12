@@ -204,19 +204,6 @@ walker get_all_query {
     }
 }
 
-walker report {
-
-    can enter with `root entry {
-        report here;
-        report boy();
-        report girl().__jac__;
-    }
-
-    obj __specs__ {
-        static has methods: list = ["get"], auth: bool = False;
-    }
-}
-
 walker combination {
     has a: str;
     has b: str;
@@ -300,6 +287,19 @@ walker nested2 {
 
     obj __specs__ {
         static has auth: bool = False;
+    }
+}
+
+walker report {
+
+    can enter with `root entry {
+        report here;
+        report boy(val1="1", val2="2");
+        report girl(val="g").__jac__;
+    }
+
+    obj __specs__ {
+        static has methods: list = ["get"], auth: bool = False;
     }
 }
 

@@ -71,9 +71,9 @@ class ObjectAnchor(_ObjectAnchor):
                 return architype
             return None
 
-        from jaclang.core.context import ExecutionContext
+        from .context import JaseciContext
 
-        jsrc = ExecutionContext.get().datasource
+        jsrc = JaseciContext.get().datasource
         anchor = jsrc.find_one(self.id)
 
         if anchor and (node or self).has_read_access(anchor):
@@ -101,9 +101,9 @@ class NodeAnchor(ObjectAnchor):
         return None
 
     def _save(self) -> None:
-        from jaclang.core.context import ExecutionContext
+        from .context import JaseciContext
 
-        jsrc = ExecutionContext.get().datasource
+        jsrc = JaseciContext.get().datasource
 
         for edge in self.edges:
             edge.save()
@@ -126,9 +126,9 @@ class NodeAnchor(ObjectAnchor):
     def destroy(self) -> None:
         """Delete Anchor."""
         if self.architype and self.current_access_level > 1:
-            from jaclang.core.context import ExecutionContext
+            from .context import JaseciContext
 
-            jsrc = ExecutionContext.get().datasource
+            jsrc = JaseciContext.get().datasource
             for edge in self.edges:
                 edge.destroy()
 
@@ -267,9 +267,9 @@ class EdgeAnchor(ObjectAnchor):
         return None
 
     def _save(self) -> None:
-        from jaclang.core.context import ExecutionContext
+        from .context import JaseciContext
 
-        jsrc = ExecutionContext.get().datasource
+        jsrc = JaseciContext.get().datasource
 
         if source := self.source:
             source.save()
@@ -295,9 +295,9 @@ class EdgeAnchor(ObjectAnchor):
     def destroy(self) -> None:
         """Delete Anchor."""
         if self.architype and self.current_access_level == 1:
-            from jaclang.core.context import ExecutionContext
+            from .context import JaseciContext
 
-            jsrc = ExecutionContext.get().datasource
+            jsrc = JaseciContext.get().datasource
 
             source = self.source
             target = self.target
@@ -375,9 +375,9 @@ class WalkerAnchor(ObjectAnchor):
         return None
 
     def _save(self) -> None:
-        from jaclang.core.context import ExecutionContext
+        from .context import JaseciContext
 
-        ExecutionContext.get().datasource.set(self)
+        JaseciContext.get().datasource.set(self)
 
     def save(self) -> None:
         """Save Anchor."""
@@ -395,9 +395,9 @@ class WalkerAnchor(ObjectAnchor):
     def destroy(self) -> None:
         """Delete Anchor."""
         if self.architype and self.current_access_level > 1:
-            from jaclang.core.context import ExecutionContext
+            from .context import JaseciContext
 
-            ExecutionContext.get().datasource.remove(self)
+            JaseciContext.get().datasource.remove(self)
 
     def sync(self, node: Optional["NodeAnchor"] = None) -> Optional[WalkerArchitype]:
         """Retrieve the Architype from db and return."""

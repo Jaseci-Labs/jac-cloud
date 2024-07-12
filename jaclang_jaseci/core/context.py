@@ -16,12 +16,12 @@ from jaclang.core.memory import Memory
 from .architype import NodeAnchor, Root
 
 SHOW_ENDPOINT_RETURNS = getenv("SHOW_ENDPOINT_RETURNS") == "true"
-EXECUTION_CONTEXT = ContextVar[Optional["ExecutionContext"]]("ExecutionContext")
+JASECI_CONTEXT = ContextVar[Optional["JaseciContext"]]("JaseciContext")
 SUPER_ROOT = ObjectId("000000000000000000000000")
 PUBLIC_ROOT = ObjectId("000000000000000000000001")
 
 
-class ExecutionContext:
+class JaseciContext:
     """Execution Context."""
 
     def __init__(
@@ -73,10 +73,10 @@ class ExecutionContext:
         self.datasource.close()
 
     @staticmethod
-    def get(options: Optional[dict[str, Any]] = None) -> ExecutionContext:
+    def get(options: Optional[dict[str, Any]] = None) -> JaseciContext:
         """Get or create execution context."""
-        if not isinstance(ctx := EXECUTION_CONTEXT.get(None), ExecutionContext):
-            EXECUTION_CONTEXT.set(ctx := ExecutionContext(**options or {}))
+        if not isinstance(ctx := JASECI_CONTEXT.get(None), JaseciContext):
+            JASECI_CONTEXT.set(ctx := JaseciContext(**options or {}))
         return ctx
 
     def response(self, returns: list[Any], status: int = 200) -> dict[str, Any]:
