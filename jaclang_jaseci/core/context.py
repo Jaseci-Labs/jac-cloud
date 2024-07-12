@@ -67,6 +67,10 @@ class JaseciContext:
             anchor = default() if callable(default) else default
         return anchor
 
+    def validate_access(self) -> bool:
+        """Validate access."""
+        return self.root.has_read_access(self.entry)
+
     def close(self) -> None:
         """Clean up context."""
         self.datasource.close()

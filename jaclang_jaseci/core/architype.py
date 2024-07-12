@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from inspect import iscoroutine
 from pickle import dumps
 from re import IGNORECASE, compile
@@ -77,7 +77,7 @@ class Anchor(_Anchor):
         from .context import JaseciContext
 
         jsrc = JaseciContext.get().datasource
-        anchor = jsrc.find_one(self.id)  # type: ignore[assignment]
+        anchor = jsrc.find_one(self.id)  # type: ignore[arg-type]
 
         if anchor and (node or self).has_read_access(anchor):
             self.__dict__.update(anchor.__dict__)
@@ -91,6 +91,21 @@ class Anchor(_Anchor):
     async def destroy(self) -> None:  # type: ignore[override]
         """Save Anchor."""
         raise NotImplementedError("destroy must be implemented in subclasses")
+
+    def serialize(self) -> dict[str, object]:
+        """Serialize Anchor."""
+        return {
+            "_id": self.id,
+            "type": self.type.value,
+            "name": self.name,
+            "root": self.root,
+            "access": self.access.serialize(),
+            "architype": (
+                asdict(self.architype)
+                if is_dataclass(self.architype) and not isinstance(self.architype, type)
+                else {}
+            ),
+        }
 
 
 @dataclass(eq=False)

@@ -147,7 +147,8 @@ def populate_apis(cls: type) -> None:
             jctx = JaseciContext.get({"request": request, "entry": node})
 
             wlk: WalkerAnchor = cls(**body, **pl["query"], **pl["files"]).__jac__
-            await wlk.spawn_call(jctx.entry)
+            if jctx.validate_access():
+                await wlk.spawn_call(jctx.entry)
 
             jctx.close()
             return ORJSONResponse(jctx.response(wlk.returns))
