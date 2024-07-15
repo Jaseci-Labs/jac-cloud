@@ -10,9 +10,9 @@ from bson import ObjectId
 
 from fastapi import Request
 
-from jaclang.core.memory import Memory
-
 from .architype import Anchor, Architype, NodeAnchor, Root
+from .memory import MongoDB
+
 
 SHOW_ENDPOINT_RETURNS = getenv("SHOW_ENDPOINT_RETURNS") == "true"
 JASECI_CONTEXT = ContextVar[Optional["JaseciContext"]]("JaseciContext")
@@ -30,7 +30,7 @@ class JaseciContext:
         **ignored: Any,  # noqa: ANN401
     ) -> None:
         """Create JacContext."""
-        self.datasource: Memory = Memory()
+        self.datasource: MongoDB = MongoDB()
         self.reports: list[Any] = []
         self.super_root = self.load(NodeAnchor(id=SUPER_ROOT), self.generate_super_root)
         self.root: NodeAnchor = getattr(request, "_root", None) or self.load(

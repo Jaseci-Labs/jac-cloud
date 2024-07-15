@@ -1,27 +1,37 @@
 """Memory abstraction for jaseci plugin."""
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Generator, Optional, Union, cast
+from typing import (
+    Any,
+    AsyncGenerator,
+    Callable,
+    Generator,
+    Optional,
+    Type,
+    Union,
+    cast,
+)
 
 from bson import ObjectId
 
 from jaclang.core.architype import MANUAL_SAVE
 
+from motor.motor_asyncio import AsyncIOMotorClientSession
+
 from .architype import (
     Anchor,
+    AnchorType,
     Architype,
     EdgeAnchor,
     EdgeArchitype,
     NodeAnchor,
     NodeArchitype,
-    ObjectType,
     Permission,
     WalkerAnchor,
     WalkerArchitype,
 )
 
 IDS = Union[ObjectId, list[ObjectId]]
-ANCS = Union[Anchor, list[Anchor]]
 
 
 @dataclass
@@ -85,65 +95,54 @@ class Memory:
 class MongoDB(Memory):
     """Shelf Handler."""
 
-    def find(  # type: ignore[override]
-        self, anchors: ANCS, filter: Optional[Callable[[Anchor], Anchor]] = None
-    ) -> Generator[Anchor, None, None]:
+    __session__: Optional[AsyncIOMotorClientSession] = None
+
+    async def find(  # type: ignore[override]
+        self,
+        type: AnchorType,
+        ids: IDS,
+        filter: Optional[Callable[[Anchor], Anchor]] = None,
+        session: Optional[AsyncIOMotorClientSession] = None,
+    ) -> AsyncGenerator[Anchor, None]:
         """Find anchors from datasource by ids with filter."""
-        if not isinstance(anchors, list):
-            anchors = [anchors]
+        if not isinstance(ids, list):
+            ids = [ids]
 
-        for anchor in anchors:
-            _anchor = self.__mem__.get(anchor.id)
-            MANUAL_SAVE
+        base_anchor: Type[Anchor] = Anchor
+        match type:
+            case AnchorType.node:
+                base_anchor = NodeAnchor
+            case AnchorType.edge:
+                base_anchor = EdgeAnchor
+            case AnchorType.walker:
+                base_anchor = WalkerAnchor
+            case _:
+                pass
 
-            if _anchor and (not filter or filter(_anchor)):
+        async for anchor in await base_anchor.Collection.find(
+            {
+                "_id": {"$in": [id for id in ids if id not in self.__mem__]},
+            },
+            session=session or self.__session__,
+        ):
+            self.__mem__[anchor.id] = anchor
+
+        for anchor in ids:
+            if (_anchor := self.__mem__.get(anchor.id)) and (
+                not filter or filter(_anchor)
+            ):
                 yield _anchor
 
-    def set(self, data: Union[Anchor, list[Anchor]], mem_only: bool = False) -> None:
-        """Save anchor/s to datasource."""
-        super().set(data)
+    async def find_one(  # type: ignore[override]
+        self,
+        type: AnchorType,
+        ids: IDS,
+        filter: Optional[Callable[[Anchor], Anchor]] = None,
+        session: Optional[AsyncIOMotorClientSession] = None,
+    ) -> Optional[Anchor]:
+        """Find one anchor from memory by ids with filter."""
+        return await anext(self.find(type, ids, filter, session), None)
 
     def remove(self, data: Union[Anchor, list[Anchor]]) -> None:
         """Remove anchor/s from datasource."""
         super().remove(data)
-
-    def get(self, anchor: dict[str, Any]) -> Anchor:
-        """Get Anchor Instance."""
-        name = cast(str, anchor.get("name"))
-        architype = anchor.pop("architype")
-        access = Permission.deserialize(anchor.pop("access"))
-
-        match ObjectType(anchor.pop("type")):
-            case ObjectType.node:
-                nanch = NodeAnchor(
-                    edges=[
-                        e for edge in anchor.pop("edges") if (e := EdgeAnchor.ref(edge))
-                    ],
-                    access=access,
-                    connected=True,
-                    **anchor,
-                )
-                nanch.architype = NodeArchitype.get(name or "Root")(
-                    __jac__=nanch, **architype
-                )
-                return nanch
-            case ObjectType.edge:
-                eanch = EdgeAnchor(
-                    source=NodeAnchor.ref(anchor.pop("source")),
-                    target=NodeAnchor.ref(anchor.pop("target")),
-                    access=access,
-                    connected=True,
-                    **anchor,
-                )
-                eanch.architype = EdgeArchitype.get(name or "GenericEdge")(
-                    __jac__=eanch, **architype
-                )
-                return eanch
-            case ObjectType.walker:
-                wanch = WalkerAnchor(access=access, connected=True, **anchor)
-                wanch.architype = WalkerArchitype.get(name)(__jac__=wanch, **architype)
-                return wanch
-            case _:
-                oanch = Anchor(access=access, connected=True, **anchor)
-                oanch.architype = Architype(__jac__=oanch)
-                return oanch

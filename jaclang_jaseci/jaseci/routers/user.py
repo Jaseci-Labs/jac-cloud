@@ -24,7 +24,7 @@ User = BaseUser.model()  # type: ignore[misc]
 async def register(request: Request, req: User.register_type()) -> ORJSONResponse:  # type: ignore
     """Register user API."""
     jcxt = JaseciContext.get({"request": request})
-    async with await NodeAnchor.Collection.get_session() as session:
+    async with await User.Collection.get_session() as session:
         async with session.start_transaction():
             try:
                 root = Root()
