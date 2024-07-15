@@ -12,7 +12,7 @@ from ..dtos import UserRequest, UserVerification
 from ..models import User as BaseUser
 from ..security import create_code, create_token, verify_code
 from ..utils import Emailer, logger
-from ...core.architype import NodeAnchor, Root
+from ...core.architype import Root
 from ...core.context import JaseciContext
 
 router = APIRouter(prefix="/user", tags=["user"])
