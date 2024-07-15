@@ -23,14 +23,16 @@ User = BaseUser.model()  # type: ignore[misc]
 @router.post("/register", status_code=status.HTTP_200_OK)
 async def register(request: Request, req: User.register_type()) -> ORJSONResponse:  # type: ignore
     """Register user API."""
-    jcxt = JaseciContext.get({"request": request})
+    jcxt = JaseciContext.get()
+    await jcxt.build()
+
     async with await User.Collection.get_session() as session:
         async with session.start_transaction():
             try:
                 root = Root()
                 anchor = root.__jac__
                 anchor.root = None
-                await anchor.save()
+                await anchor.save(session)
 
                 req_obf: dict = req.obfuscate()
                 req_obf["root_id"] = root.__jac__.id

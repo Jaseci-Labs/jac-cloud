@@ -27,6 +27,7 @@ from ..core.architype import (
     DSFunc,
     EdgeArchitype,
     GenericEdge,
+    NodeAnchor,
     NodeArchitype,
     Root,
     WalkerAnchor,
@@ -144,7 +145,8 @@ def populate_apis(cls: type) -> None:
                 except ValidationError as e:
                     return ORJSONResponse({"detail": e.errors()})
 
-            jctx = JaseciContext.get({"request": request, "entry": node})
+            jctx = JaseciContext.get()
+            await jctx.build(request, NodeAnchor.ref(node or ""))
 
             wlk: WalkerAnchor = cls(**body, **pl["query"], **pl["files"]).__jac__
             if jctx.validate_access():
@@ -225,12 +227,6 @@ class DefaultSpecs:
 
 class JacPlugin:
     """Jaseci Implementations."""
-
-    @staticmethod
-    @hookimpl
-    def context(options: Optional[dict[str, Any]]) -> JaseciContext:
-        """Get the execution context."""
-        return JaseciContext.get(options)
 
     @staticmethod
     @hookimpl

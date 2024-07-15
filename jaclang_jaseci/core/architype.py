@@ -353,11 +353,11 @@ class Anchor(_Anchor):
 
     def allocate(self) -> None:
         """Allocate hashes and memory."""
-        from .context import JaseciContext
+        from .context import JASECI_CONTEXT
 
-        jctx = JaseciContext.get()
-        self.root = jctx.root.id
-        jctx.datasource.set(self)
+        if jctx := JASECI_CONTEXT.get(None):
+            self.root = jctx.root.id
+            jctx.datasource.set(self)
 
     async def save(self, session: Optional[AsyncIOMotorClientSession] = None) -> None:  # type: ignore[override]
         """Save Anchor."""
@@ -398,7 +398,7 @@ class Anchor(_Anchor):
 
     def data_hash(self) -> int:
         """Get current serialization hash."""
-        return hash(dumps(self.serialize()))
+        return hash(dumps(self.serialize(True)))
 
     def sync_hash(self) -> None:
         """Sync current serialization hash."""
@@ -407,13 +407,12 @@ class Anchor(_Anchor):
 
         self.hash = self.data_hash()
 
-    def serialize(self) -> dict[str, object]:
+    def serialize(self, dumps: bool = False) -> dict[str, object]:
         """Serialize Anchor."""
         return {
-            "_id": self.id,
-            "type": self.type.value,
+            "_id": str(self.id) if dumps else self.id,
             "name": self.name,
-            "root": self.root,
+            "root": str(self.root) if dumps else self.root,
             "access": self.access.serialize(),
             "architype": (
                 asdict(self.architype)
@@ -448,6 +447,7 @@ class NodeAnchor(Anchor):
             doc = cast(dict, doc)
             architype: dict = doc.pop("architype")
             anchor = NodeAnchor(
+                id=doc.pop("_id"),
                 edges=[e for edge in doc.pop("edges") if (e := EdgeAnchor.ref(edge))],
                 access=Permission.deserialize(doc.pop("access")),
                 connected=True,
@@ -609,9 +609,12 @@ class NodeAnchor(Anchor):
         """Invoke data spatial call."""
         return await walk.spawn_call(self)
 
-    def serialize(self) -> dict[str, object]:
+    def serialize(self, dumps: bool = False) -> dict[str, object]:
         """Serialize Node Anchor."""
-        return {**super().serialize(), "edges": [edge.ref_id for edge in self.edges]}
+        return {
+            **super().serialize(dumps),
+            "edges": [edge.ref_id for edge in self.edges],
+        }
 
 
 @dataclass(eq=False)
@@ -638,6 +641,7 @@ class EdgeAnchor(Anchor):
             doc = cast(dict, doc)
             architype: dict = doc.pop("architype")
             anchor = EdgeAnchor(
+                id=doc.pop("_id"),
                 source=NodeAnchor.ref(doc.pop("source")),
                 target=NodeAnchor.ref(doc.pop("target")),
                 access=Permission.deserialize(doc.pop("access")),
@@ -712,10 +716,10 @@ class EdgeAnchor(Anchor):
         else:
             raise ValueError("Edge has no target.")
 
-    def serialize(self) -> dict[str, object]:
+    def serialize(self, dumps: bool = False) -> dict[str, object]:
         """Serialize Node Anchor."""
         return {
-            **super().serialize(),
+            **super().serialize(dumps),
             "source": self.source.ref_id if self.source else None,
             "target": self.target.ref_id if self.target else None,
         }
@@ -748,6 +752,7 @@ class WalkerAnchor(Anchor):
             doc = cast(dict, doc)
             architype: dict = doc.pop("architype")
             anchor = WalkerAnchor(
+                id=doc.pop("_id"),
                 access=Permission.deserialize(doc.pop("access")),
                 connected=True,
                 hashes={key: hash(dumps(val)) for key, val in architype.items()},

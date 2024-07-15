@@ -2,33 +2,26 @@
 
 from dataclasses import dataclass, field
 from typing import (
-    Any,
     AsyncGenerator,
     Callable,
     Generator,
     Optional,
     Type,
     Union,
-    cast,
 )
 
 from bson import ObjectId
 
-from jaclang.core.architype import MANUAL_SAVE
+# from jaclang.core.architype import MANUAL_SAVE
 
 from motor.motor_asyncio import AsyncIOMotorClientSession
 
 from .architype import (
     Anchor,
     AnchorType,
-    Architype,
     EdgeAnchor,
-    EdgeArchitype,
     NodeAnchor,
-    NodeArchitype,
-    Permission,
     WalkerAnchor,
-    WalkerArchitype,
 )
 
 IDS = Union[ObjectId, list[ObjectId]]
@@ -127,10 +120,8 @@ class MongoDB(Memory):
         ):
             self.__mem__[anchor.id] = anchor
 
-        for anchor in ids:
-            if (_anchor := self.__mem__.get(anchor.id)) and (
-                not filter or filter(_anchor)
-            ):
+        for id in ids:
+            if (_anchor := self.__mem__.get(id)) and (not filter or filter(_anchor)):
                 yield _anchor
 
     async def find_one(  # type: ignore[override]

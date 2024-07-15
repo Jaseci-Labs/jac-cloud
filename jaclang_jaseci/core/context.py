@@ -10,7 +10,7 @@ from bson import ObjectId
 
 from fastapi import Request
 
-from .architype import Anchor, Architype, NodeAnchor, Root
+from .architype import Anchor, AnchorType, Architype, NodeAnchor, Root
 from .memory import MongoDB
 
 
@@ -25,18 +25,24 @@ class JaseciContext:
 
     def __init__(
         self,
-        request: Optional[Request] = None,
-        entry: Optional[NodeAnchor] = None,
         **ignored: Any,  # noqa: ANN401
     ) -> None:
         """Create JacContext."""
         self.datasource: MongoDB = MongoDB()
         self.reports: list[Any] = []
-        self.super_root = self.load(NodeAnchor(id=SUPER_ROOT), self.generate_super_root)
-        self.root: NodeAnchor = getattr(request, "_root", None) or self.load(
+
+    async def build(
+        self, request: Optional[Request] = None, entry: Optional[NodeAnchor] = None
+    ) -> None:
+        """Async build JacContext."""
+        self.request = request
+        self.super_root = await self.load(
+            NodeAnchor(id=SUPER_ROOT), self.generate_super_root
+        )
+        self.root: NodeAnchor = getattr(request, "_root", None) or await self.load(
             NodeAnchor(id=PUBLIC_ROOT), self.generate_public_root
         )
-        self.entry: NodeAnchor = self.load(entry, self.root)
+        self.entry: NodeAnchor = await self.load(entry, self.root)
 
     def generate_super_root(self) -> NodeAnchor:
         """Generate default super root."""
@@ -54,13 +60,15 @@ class JaseciContext:
         self.datasource.set(public_root)
         return public_root
 
-    def load(
+    async def load(
         self,
         anchor: Optional[NodeAnchor],
         default: Union[NodeAnchor, Callable[[], NodeAnchor]],
     ) -> NodeAnchor:
         """Load initial anchors."""
-        if anchor and (_anchor := self.datasource.find_one(anchor.id)):
+        if anchor and (
+            _anchor := await self.datasource.find_one(AnchorType.node, anchor.id)
+        ):
             anchor.__dict__.update(_anchor.__dict__)
             anchor.current_access_level = 2
         else:
