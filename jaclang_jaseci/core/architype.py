@@ -271,28 +271,28 @@ class Anchor(_Anchor):
             self._set.update({"access.all": -1})
 
     async def pull_changes(
-        self,
+        self, propagate: bool = True
     ) -> list[InsertOne[Any] | DeleteMany | DeleteOne | UpdateMany | UpdateOne]:
         """Return changes and clear current reference."""
         self.rollback_changes = deepcopy(self.changes)
         self.rollback_hashes = copy(self.hashes)
 
         changes = self.changes
-        _set = changes.pop("$set", {})
         self.changes = {}  # renew reference
 
+        old_set = changes.pop("$set", {})
         if is_dataclass(architype := self.architype) and not isinstance(
             architype, type
         ):
             for key, val in asdict(architype).items():
                 if (h := hash(dumps(val))) != self.hashes.get(key):
                     self.hashes[key] = h
-                    _set[f"architype.{key}"] = val
+                    old_set[f"architype.{key}"] = val
 
-        if _set:
-            changes["$set"] = _set
+        if old_set:
+            changes["$set"] = old_set
 
-        _ops: list[tuple[dict[str, ObjectId], dict[str, Any]]] = []
+        raw_query: list[tuple[dict[str, ObjectId], dict[str, Any]]] = []
 
         anchor_id = self.id
 
@@ -307,25 +307,27 @@ class Anchor(_Anchor):
                     _list = op[ops[1]] = list(_anchors)
                     for idx, anchor in enumerate(_list):
                         if isinstance(anchor, Anchor):
-                            await anchor.save()
+                            if propagate:
+                                await anchor.save()
                             _list[idx] = anchor.ref_id
             if _list:
-                _ops.append(({"_id": anchor_id}, {ops[0]: target}))
+                raw_query.append(({"_id": anchor_id}, {ops[0]: target}))
 
-        _qunset_set = {}
-        if _qset := changes.get("$set"):
-            _qunset_set["$set"] = _qset
+        if self.current_access_level > 1:
+            additional_update = {}
+            if to_set := changes.get("$set"):
+                additional_update["$set"] = to_set
 
-        if _qunset := changes.get("$unset"):
-            _qunset_set["$unset"] = _qunset
+            if to_unset := changes.get("$unset"):
+                additional_update["$unset"] = to_unset
 
-        if _qunset_set:
-            if _ops:
-                _ops[0][1].update(_qunset_set)
-            else:
-                _ops.append(({"_id": anchor_id}, _qunset_set))
+            if additional_update:
+                if raw_query:
+                    raw_query[0][1].update(additional_update)
+                else:
+                    raw_query.append(({"_id": anchor_id}, additional_update))
 
-        return [UpdateOne(*_op) for _op in _ops]
+        return [UpdateOne(*op) for op in raw_query]
 
     def rollback(self) -> None:
         """Rollback hashes so set update still available."""
@@ -356,7 +358,8 @@ class Anchor(_Anchor):
         from .context import JASECI_CONTEXT
 
         if jctx := JASECI_CONTEXT.get(None):
-            self.root = jctx.root.id
+            if jctx.root:
+                self.root = jctx.root.id
             jctx.datasource.set(self)
 
     async def save(self, session: Optional[AsyncIOMotorClientSession] = None) -> None:  # type: ignore[override]
@@ -386,11 +389,19 @@ class Anchor(_Anchor):
 
     async def insert(self, session: Optional[AsyncIOMotorClientSession] = None) -> None:
         """Insert Anchor."""
-        raise NotImplementedError("insert must be implemented in subclasses")
+        await self.Collection.insert_one(self.serialize(), session)
 
     async def update(self, session: Optional[AsyncIOMotorClientSession] = None) -> None:
         """Update Anchor."""
-        raise NotImplementedError("update must be implemented in subclasses")
+        if changes := await self.pull_changes():
+            try:
+                await self.Collection.bulk_write(
+                    changes,
+                    session=session,
+                )
+            except Exception:
+                self.rollback()
+                raise
 
     async def destroy(self, session: Optional[AsyncIOMotorClientSession] = None) -> None:  # type: ignore[override]
         """Save Anchor."""
@@ -420,6 +431,17 @@ class Anchor(_Anchor):
                 else {}
             ),
         }
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> Anchor:
+        """Override deepcopy handler temporary."""
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.id = self.id
+        result.name = self.name
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+        return result
 
 
 @dataclass(eq=False)
@@ -475,19 +497,7 @@ class NodeAnchor(Anchor):
         for edge in self.edges:
             await edge.save(session)
 
-        await self.Collection.insert_one(self.serialize(), session)
-
-    async def update(self, session: Optional[AsyncIOMotorClientSession] = None) -> None:
-        """Update Anchor."""
-        if changes := await self.pull_changes():
-            try:
-                await self.Collection.bulk_write(
-                    changes,
-                    session=session,
-                )
-            except Exception:
-                self.rollback()
-                raise
+        await super().insert(session)
 
     async def destroy(self) -> None:  # type: ignore[override]
         """Delete Anchor."""
@@ -664,6 +674,16 @@ class EdgeAnchor(Anchor):
             )
         return None
 
+    async def insert(self, session: Optional[AsyncIOMotorClientSession] = None) -> None:
+        """Insert Anchor."""
+        if source := self.source:
+            await source.save(session)
+
+        if target := self.target:
+            await target.save(session)
+
+        await super().insert(session)
+
     async def destroy(self) -> None:  # type: ignore[override]
         """Delete Anchor."""
         if self.architype and self.current_access_level == 1:
@@ -697,14 +717,18 @@ class EdgeAnchor(Anchor):
         self.is_undirected = is_undirected
         src.edges.append(self)
         trg.edges.append(self)
+        src.connect_edge(self)
+        trg.connect_edge(self)
         return self
 
     def detach(self) -> None:
         """Detach edge from nodes."""
         if source := self.source:
             source.edges.remove(self)
+            source.disconnect_edge(self)
         if target := self.target:
             target.edges.remove(self)
+            target.disconnect_edge(self)
 
         self.source = None
         self.target = None

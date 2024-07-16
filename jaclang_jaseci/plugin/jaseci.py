@@ -149,10 +149,10 @@ def populate_apis(cls: type) -> None:
             await jctx.build(request, NodeAnchor.ref(node or ""))
 
             wlk: WalkerAnchor = cls(**body, **pl["query"], **pl["files"]).__jac__
-            if jctx.validate_access():
-                await wlk.spawn_call(jctx.entry)
+            if jctx.validate_access() and (entry := jctx.entry):
+                await wlk.spawn_call(entry)
 
-            jctx.close()
+            await jctx.close()
             return ORJSONResponse(jctx.response(wlk.returns))
 
         async def api_root(
@@ -505,7 +505,7 @@ class JacPlugin:
     @hookimpl
     async def get_root() -> Root:
         """Jac's assign comprehension feature."""
-        if architype := await JaseciContext.get().root.sync():
+        if (root := JaseciContext.get().root) and (architype := await root.sync()):
             return cast(Root, architype)
         raise Exception("No Available Root!")
 

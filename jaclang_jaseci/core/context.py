@@ -30,6 +30,9 @@ class JaseciContext:
         """Create JacContext."""
         self.datasource: MongoDB = MongoDB()
         self.reports: list[Any] = []
+        self.super_root: Optional[NodeAnchor] = None
+        self.root: Optional[NodeAnchor] = None
+        self.entry: Optional[NodeAnchor] = None
 
     async def build(
         self, request: Optional[Request] = None, entry: Optional[NodeAnchor] = None
@@ -39,10 +42,10 @@ class JaseciContext:
         self.super_root = await self.load(
             NodeAnchor(id=SUPER_ROOT), self.generate_super_root
         )
-        self.root: NodeAnchor = getattr(request, "_root", None) or await self.load(
+        self.root = getattr(request, "_root", None) or await self.load(
             NodeAnchor(id=PUBLIC_ROOT), self.generate_public_root
         )
-        self.entry: NodeAnchor = await self.load(entry, self.root)
+        self.entry = await self.load(entry, self.root)
 
     def generate_super_root(self) -> NodeAnchor:
         """Generate default super root."""
@@ -77,11 +80,11 @@ class JaseciContext:
 
     def validate_access(self) -> bool:
         """Validate access."""
-        return self.root.has_read_access(self.entry)
+        return bool(self.root and self.entry and self.root.has_read_access(self.entry))
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """Clean up context."""
-        self.datasource.close()
+        await self.datasource.close()
 
     @staticmethod
     def get(options: Optional[dict[str, Any]] = None) -> JaseciContext:

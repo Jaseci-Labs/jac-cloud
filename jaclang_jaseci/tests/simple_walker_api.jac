@@ -26,6 +26,7 @@ walker create_sample_graph {
         here ++> g;
         g ++> p;
         p ++> c;
+        await here.__jac__.save();
     }
 
     obj __specs__ {}

@@ -47,7 +47,7 @@ async def register(request: Request, req: User.register_type()) -> ORJSONRespons
                 result = None
 
                 await session.abort_transaction()
-    jcxt.close()
+    await jcxt.close()
     if result:
         return ORJSONResponse({"message": "Successfully Registered!"}, 201)
     else:

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from typing import (
+    Any,
     AsyncGenerator,
     Callable,
     Generator,
@@ -12,9 +13,12 @@ from typing import (
 
 from bson import ObjectId
 
-# from jaclang.core.architype import MANUAL_SAVE
+from jaclang.core.architype import MANUAL_SAVE
+
 
 from motor.motor_asyncio import AsyncIOMotorClientSession
+
+from pymongo import DeleteMany, DeleteOne, InsertOne, UpdateMany, UpdateOne
 
 from .architype import (
     Anchor,
@@ -23,6 +27,8 @@ from .architype import (
     NodeAnchor,
     WalkerAnchor,
 )
+from ..jaseci.datasources import Collection
+from ..jaseci.utils import logger
 
 IDS = Union[ObjectId, list[ObjectId]]
 
@@ -32,16 +38,12 @@ class Memory:
     """Generic Memory Handler."""
 
     __mem__: dict[ObjectId, Anchor] = field(default_factory=dict)
-    __gc__: set[ObjectId] = field(default_factory=set)
+    __gc__: set[Anchor] = field(default_factory=set)
 
     def close(self) -> None:
         """Close memory handler."""
         self.__mem__.clear()
         self.__gc__.clear()
-
-    def __del__(self) -> None:
-        """On garbage collection cleanup."""
-        self.close()
 
     def find(
         self, ids: IDS, filter: Optional[Callable[[Anchor], Anchor]] = None
@@ -68,9 +70,9 @@ class Memory:
         """Save anchor/s to memory."""
         if isinstance(data, list):
             for d in data:
-                if d.id not in self.__gc__:
+                if d not in self.__gc__:
                     self.__mem__[d.id] = d
-        elif data.id not in self.__gc__:
+        elif data not in self.__gc__:
             self.__mem__[data.id] = data
 
     def remove(self, data: Union[Anchor, list[Anchor]]) -> None:
@@ -78,10 +80,10 @@ class Memory:
         if isinstance(data, list):
             for d in data:
                 self.__mem__.pop(d.id, None)
-                self.__gc__.add(d.id)
+                self.__gc__.add(d)
         else:
             self.__mem__.pop(data.id, None)
-            self.__gc__.add(data.id)
+            self.__gc__.add(data)
 
 
 @dataclass
@@ -137,3 +139,78 @@ class MongoDB(Memory):
     def remove(self, data: Union[Anchor, list[Anchor]]) -> None:
         """Remove anchor/s from datasource."""
         super().remove(data)
+
+    async def sync(self, session: AsyncIOMotorClientSession) -> None:
+        """Sync memory to database."""
+        operations: dict[
+            AnchorType,
+            list[InsertOne[Any] | DeleteMany | DeleteOne | UpdateMany | UpdateOne],
+        ] = {
+            AnchorType.node: [],
+            AnchorType.edge: [],
+            AnchorType.walker: [],
+            AnchorType.generic: [],  # ignored
+        }
+
+        del_node_ids = []
+        del_edge_ids = []
+        del_walker_ids = []
+        for anchor in self.__gc__:
+            match anchor.type:
+                case AnchorType.node:
+                    del_node_ids.append(anchor.id)
+                case AnchorType.edge:
+                    del_edge_ids.append(anchor.id)
+                case AnchorType.walker:
+                    del_walker_ids.append(anchor.id)
+                case _:
+                    pass
+
+        if del_node_ids:
+            operations[AnchorType.node].append(
+                DeleteMany({"_id": {"$in": del_node_ids}})
+            )
+        if del_edge_ids:
+            operations[AnchorType.edge].append(
+                DeleteMany({"_id": {"$in": del_edge_ids}})
+            )
+        if del_walker_ids:
+            operations[AnchorType.walker].append(
+                DeleteMany({"_id": {"$in": del_walker_ids}})
+            )
+
+        if not MANUAL_SAVE:
+            for anchor in self.__mem__.values():
+                if anchor.architype and anchor.persistent:
+                    if not anchor.connected:
+                        anchor.connected = True
+                        anchor.sync_hash()
+                        operations[anchor.type].append(InsertOne(anchor.serialize()))
+                    elif anchor.current_access_level > 0 and (
+                        changes := await anchor.pull_changes(False)
+                    ):
+                        operations[anchor.type] += changes
+
+        if node_operation := operations[AnchorType.node]:
+            await NodeAnchor.Collection.bulk_write(node_operation, session)
+        if edge_operation := operations[AnchorType.edge]:
+            await EdgeAnchor.Collection.bulk_write(edge_operation, session)
+        if walker_operation := operations[AnchorType.walker]:
+            await WalkerAnchor.Collection.bulk_write(walker_operation, session)
+
+    async def close(self) -> None:  # type: ignore[override]
+        """Close memory handler."""
+        if self.__session__:
+            await self.sync(self.__session__)
+        else:
+            async with await Collection.get_session() as session:
+                async with session.start_transaction():
+                    try:
+                        await self.sync(session)
+                        await session.commit_transaction()
+                    except Exception:
+                        await session.abort_transaction()
+                        logger.exception("Error syncing memory to database!")
+                        raise
+
+        super().close()

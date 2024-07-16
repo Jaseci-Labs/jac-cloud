@@ -219,7 +219,7 @@ async def register(request: Request, platform: str, open_id: OpenID) -> Response
                 result = None
 
                 await session.abort_transaction()
-    jcxt.close()
+    await jcxt.close()
 
     if result:
         return await login(platform, open_id)
