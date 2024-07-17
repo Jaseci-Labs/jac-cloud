@@ -3,7 +3,6 @@
 from contextlib import suppress
 from json import load
 from os import getenv
-from typing import Union
 from unittest.async_case import IsolatedAsyncioTestCase
 
 from httpx import get, post
@@ -38,8 +37,12 @@ class SimpleGraphTest(IsolatedAsyncioTestCase):
         await self.client.drop_database(self.database)
 
     def post_api(
-        self, api: str, json: dict = None, user: int = 0, expect_error: bool = False
-    ) -> Union[dict, int]:
+        self,
+        api: str,
+        json: dict | None = None,
+        user: int = 0,
+        expect_error: bool = False,
+    ) -> dict | int:
         """Call walker post API."""
         res = post(
             f"{self.host}/walker/{api}", json=json, headers=self.users[user]["headers"]
