@@ -11,7 +11,7 @@ from pydantic.fields import FieldInfo
 
 from ..datasources.collection import Collection as BaseCollection
 
-NULL_BYTES = bytes()
+NO_PASSWORD = bytes()
 
 
 class UserCommon(BaseModel):
@@ -64,7 +64,7 @@ class User(UserCommon):
             doc = cast(dict, doc)
             return User.model()(
                 id=str(doc.pop("_id")),
-                password=cast(bytes, doc.pop("password", None)) or NULL_BYTES,
+                password=cast(bytes, doc.pop("password", None)) or NO_PASSWORD,
                 root_id=str(doc.pop("root_id")),
                 **doc,
             )

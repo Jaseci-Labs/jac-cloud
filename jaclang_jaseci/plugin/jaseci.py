@@ -1,8 +1,10 @@
 """Jac Language Features."""
 
+from asyncio import get_event_loop
 from collections import OrderedDict
 from dataclasses import Field, _MISSING_TYPE, is_dataclass
 from functools import wraps
+from inspect import iscoroutinefunction
 from os import getenv
 from pydoc import locate
 from re import compile
@@ -11,7 +13,8 @@ from typing import Any, Callable, Optional, Type, TypeVar, Union, cast
 from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
 from fastapi.responses import ORJSONResponse
 
-from jaclang.compiler.constant import EdgeDir
+from jaclang.compiler.absyntree import AstAsyncNode
+from jaclang.compiler.constant import EdgeDir, JacMethods
 from jaclang.plugin.default import hookimpl
 from jaclang.plugin.feature import JacFeature as Jac
 
@@ -346,7 +349,12 @@ class JacPlugin:
 
     @staticmethod
     @hookimpl
-    async def spawn_call(op1: Architype, op2: Architype) -> WalkerArchitype:
+    def spawn_call(op1: Architype, op2: Architype) -> WalkerArchitype:
+        """Jac's spawn operator feature."""
+        return get_event_loop().run_until_complete(JacPlugin._spawn_call(op1, op2))
+
+    @staticmethod
+    async def _spawn_call(op1: Architype, op2: Architype) -> WalkerArchitype:
         """Jac's spawn operator feature."""
         if isinstance(op1, WalkerArchitype):
             return await op1.__jac__.spawn_call(op2.__jac__)
@@ -363,7 +371,21 @@ class JacPlugin:
 
     @staticmethod
     @hookimpl
-    async def ignore(
+    def ignore(
+        walker: WalkerArchitype,
+        expr: (
+            list[NodeArchitype | EdgeArchitype]
+            | list[NodeArchitype]
+            | list[EdgeArchitype]
+            | NodeArchitype
+            | EdgeArchitype
+        ),
+    ) -> bool:
+        """Jac's ignore stmt feature."""
+        return get_event_loop().run_until_complete(JacPlugin._ignore(walker, expr))
+
+    @staticmethod
+    async def _ignore(
         walker: WalkerArchitype,
         expr: (
             list[NodeArchitype | EdgeArchitype]
@@ -383,7 +405,21 @@ class JacPlugin:
 
     @staticmethod
     @hookimpl
-    async def visit_node(
+    def visit_node(
+        walker: WalkerArchitype,
+        expr: (
+            list[NodeArchitype | EdgeArchitype]
+            | list[NodeArchitype]
+            | list[EdgeArchitype]
+            | NodeArchitype
+            | EdgeArchitype
+        ),
+    ) -> bool:
+        """Jac's visit stmt feature."""
+        return get_event_loop().run_until_complete(JacPlugin._visit_node(walker, expr))
+
+    @staticmethod
+    async def _visit_node(
         walker: WalkerArchitype,
         expr: (
             list[NodeArchitype | EdgeArchitype]
@@ -403,7 +439,20 @@ class JacPlugin:
 
     @staticmethod
     @hookimpl
-    async def edge_ref(
+    def edge_ref(
+        node_obj: NodeArchitype | list[NodeArchitype],
+        target_obj: Optional[NodeArchitype | list[NodeArchitype]],
+        dir: EdgeDir,
+        filter_func: Optional[Callable[[list[EdgeArchitype]], list[EdgeArchitype]]],
+        edges_only: bool,
+    ) -> list[NodeArchitype] | list[EdgeArchitype]:
+        """Jac's apply_dir stmt feature."""
+        return get_event_loop().run_until_complete(
+            JacPlugin._edge_ref(node_obj, target_obj, dir, filter_func, edges_only)
+        )
+
+    @staticmethod
+    async def _edge_ref(
         node_obj: NodeArchitype | list[NodeArchitype],
         target_obj: Optional[NodeArchitype | list[NodeArchitype]],
         dir: EdgeDir,
@@ -460,7 +509,19 @@ class JacPlugin:
 
     @staticmethod
     @hookimpl
-    async def disconnect(
+    def disconnect(
+        left: NodeArchitype | list[NodeArchitype],
+        right: NodeArchitype | list[NodeArchitype],
+        dir: EdgeDir,
+        filter_func: Optional[Callable[[list[EdgeArchitype]], list[EdgeArchitype]]],
+    ) -> bool:
+        """Jac's disconnect operator feature."""
+        return get_event_loop().run_until_complete(
+            JacPlugin._disconnect(left, right, dir, filter_func)
+        )
+
+    @staticmethod
+    async def _disconnect(
         left: NodeArchitype | list[NodeArchitype],
         right: NodeArchitype | list[NodeArchitype],
         dir: EdgeDir,
@@ -505,6 +566,11 @@ class JacPlugin:
     @hookimpl
     async def get_root() -> Root:
         """Jac's assign comprehension feature."""
+        return get_event_loop().run_until_complete(JacPlugin._get_root())
+
+    @staticmethod
+    async def _get_root() -> Root:
+        """Jac's assign comprehension feature."""
         if (root := JaseciContext.get().root) and (architype := await root.sync()):
             return cast(Root, architype)
         raise Exception("No Available Root!")
@@ -548,3 +614,18 @@ Jac.Obj = Architype  # type: ignore[assignment]
 Jac.Node = NodeArchitype  # type: ignore[assignment]
 Jac.Edge = EdgeArchitype  # type: ignore[assignment]
 Jac.Walker = WalkerArchitype  # type: ignore[assignment]
+
+
+def overrided_init(self: AstAsyncNode, is_async: bool) -> None:
+    """Initialize ast."""
+    self.is_async = True
+
+
+AstAsyncNode.__init__ = overrided_init  # type: ignore[method-assign]
+JacMethods.set(
+    [
+        name
+        for name, func in JacPlugin.__dict__.items()
+        if isinstance(func, staticmethod) and iscoroutinefunction(func.__func__)
+    ]
+)
