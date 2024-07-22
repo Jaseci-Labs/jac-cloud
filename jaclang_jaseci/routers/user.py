@@ -42,10 +42,11 @@ async def register(request: Request, req: User.register_type()) -> ORJSONRespons
                 root = await Root.register(session=session)
                 req_obf: dict = req.obfuscate()
                 req_obf["root_id"] = root.id
-                is_activated = req_obf["is_activated"] = not Emailer.has_client()
+                if not Emailer.has_client():
+                    req_obf["is_activated"] = True
 
                 result = await User.Collection.insert_one(req_obf, session=session)
-                if result and not is_activated:
+                if result and not req_obf["is_activated"]:
                     User.send_verification_code(await create_code(result), req.email)
                 await session.commit_transaction()
             except Exception:

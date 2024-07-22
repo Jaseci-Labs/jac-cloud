@@ -81,7 +81,7 @@ class User(UserCommon):
         user_model["password"] = (str, ...)
         user_model.pop("id", None)
         user_model.pop("root_id", None)
-        user_model.pop("is_activated", None)
+        # user_model.pop("is_activated", None)
         user_model.pop("sso", None)
 
         return create_model("UserRegister", __base__=UserCommon, **user_model)
