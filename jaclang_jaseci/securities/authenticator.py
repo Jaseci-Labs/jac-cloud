@@ -35,11 +35,12 @@ def decrypt(token: str) -> Optional[dict]:
         return None
 
 
-async def create_code(user_id: ObjectId) -> str:
+async def create_code(user_id: ObjectId, reset: bool = False) -> str:
     """Generate Verification Code."""
     verification = encrypt(
         {
             "user_id": str(user_id),
+            "reset": reset,
             "expiration": utc_timestamp(
                 hours=int(getenv("VERIFICATION_TIMEOUT") or "24")
             ),
@@ -50,14 +51,16 @@ async def create_code(user_id: ObjectId) -> str:
     raise HTTPException(500, "Verification Creation Failed!")
 
 
-async def verify_code(code: str) -> Optional[str]:
+async def verify_code(code: str, reset: bool = False) -> Optional[str]:
     """Verify Code."""
     decrypted = decrypt(code)
     if (
         decrypted
+        and decrypted.get("reset", False) == reset
         and decrypted["expiration"] > utc_timestamp()
         and await CodeMemory.hget(key=code)
     ):
+        await CodeMemory.hdelete(code)
         return decrypted["user_id"]
     return None
 
@@ -67,9 +70,14 @@ async def create_token(user: dict[str, Any]) -> str:
     user["expiration"] = utc_timestamp(hours=int(getenv("TOKEN_TIMEOUT") or "12"))
     user["state"] = random_string(8)
     token = encrypt(user)
-    if await TokenMemory.hset(key=token, data=True):
+    if await TokenMemory.hset(f"{user['id']}:{token}", data=True):
         return token
     raise HTTPException(500, "Token Creation Failed!")
+
+
+async def invalidate_token(user_id: str) -> None:
+    """Invalidate token of current user."""
+    await TokenMemory.hdelete_rgx(f"{user_id}:*")
 
 
 async def authenticate(request: Request) -> None:
@@ -81,7 +89,7 @@ async def authenticate(request: Request) -> None:
         if (
             decrypted
             and decrypted["expiration"] > utc_timestamp()
-            and await TokenMemory.hget(key=token)
+            and await TokenMemory.hget(f"{decrypted['id']}:{token}")
         ):
             user = cast(User, await User.model().Collection.find_by_id(decrypted["id"]))
             root = cast(Root, await Root.Collection.find_by_id(user.root_id))

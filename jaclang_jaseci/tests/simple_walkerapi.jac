@@ -28,6 +28,12 @@ class User(BaseUser):
         """Send verification code."""
         SendGridEmailer.send_verification_code(code, email)
 
+
+    @staticmethod
+    def send_reset_code(code: str, email: str) -> None:
+        """Send verification code."""
+        SendGridEmailer.send_reset_code(code, email)
+
     @staticmethod
     def sso_mapper(open_id) -> dict[str, object]:
         """Send verification code."""

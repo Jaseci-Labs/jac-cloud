@@ -354,6 +354,131 @@
                 }
             }
         },
+        "/user/change_password": {
+            "post": {
+                "tags": [
+                    "user"
+                ],
+                "summary": "Change Password",
+                "description": "Register user API.",
+                "operationId": "change_password_user_change_password_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UserChangePassword"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ]
+            }
+        },
+        "/user/forgot_password": {
+            "post": {
+                "tags": [
+                    "user"
+                ],
+                "summary": "Forgot Password",
+                "description": "Register user API.",
+                "operationId": "forgot_password_user_forgot_password_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UserForgotPassword"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/user/reset_password": {
+            "post": {
+                "tags": [
+                    "user"
+                ],
+                "summary": "Reset Password",
+                "description": "Register user API.",
+                "operationId": "reset_password_user_reset_password_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UserResetPassword"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/walker/create_sample_graph": {
             "post": {
                 "tags": [
@@ -3798,6 +3923,40 @@
                 "type": "object",
                 "title": "HTTPValidationError"
             },
+            "UserChangePassword": {
+                "properties": {
+                    "old_password": {
+                        "type": "string",
+                        "title": "Old Password"
+                    },
+                    "new_password": {
+                        "type": "string",
+                        "title": "New Password"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "old_password",
+                    "new_password"
+                ],
+                "title": "UserChangePassword",
+                "description": "User Creation Request Model."
+            },
+            "UserForgotPassword": {
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "title": "Email"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "email"
+                ],
+                "title": "UserForgotPassword",
+                "description": "User Creation Request Model."
+            },
             "UserRegister": {
                 "properties": {
                     "password": {
@@ -3840,6 +3999,25 @@
                     "password"
                 ],
                 "title": "UserRequest",
+                "description": "User Creation Request Model."
+            },
+            "UserResetPassword": {
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "title": "Code"
+                    },
+                    "password": {
+                        "type": "string",
+                        "title": "Password"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "code",
+                    "password"
+                ],
+                "title": "UserResetPassword",
                 "description": "User Creation Request Model."
             },
             "UserVerification": {

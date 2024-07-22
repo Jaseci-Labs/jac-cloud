@@ -9,9 +9,21 @@ from fastapi.responses import ORJSONResponse
 from passlib.hash import pbkdf2_sha512
 
 from ..models import User
-from ..models.ephemerals import UserRequest, UserVerification
+from ..models.ephemerals import (
+    UserChangePassword,
+    UserForgotPassword,
+    UserRequest,
+    UserResetPassword,
+    UserVerification,
+)
 from ..plugins import JCONTEXT, JacContext, Root
-from ..securities import create_code, create_token, verify_code
+from ..securities import (
+    authenticator,
+    create_code,
+    create_token,
+    invalidate_token,
+    verify_code,
+)
 from ..utils import Emailer, logger
 
 router = APIRouter(prefix="/user", tags=["user"])
@@ -77,3 +89,55 @@ async def root(req: UserRequest) -> ORJSONResponse:
     token = await create_token(user_json)
 
     return ORJSONResponse(content={"token": token, "user": user_json})
+
+
+@router.post(
+    "/change_password", status_code=status.HTTP_200_OK, dependencies=authenticator
+)
+async def change_password(request: Request, ucp: UserChangePassword) -> ORJSONResponse:  # type: ignore
+    """Register user API."""
+    user: User | None = getattr(request, "auth_user", None)  # type: ignore
+    if user:
+        with_pass = await User.Collection.find_by_email(user.email)
+        if (
+            isinstance(with_pass, User)
+            and pbkdf2_sha512.verify(ucp.old_password, with_pass.password)
+            and await User.Collection.update_one(
+                {"_id": ObjectId(user.id)},
+                {"$set": {"password": pbkdf2_sha512.hash(ucp.new_password).encode()}},
+            )
+        ):
+            await invalidate_token(user.id)
+            return ORJSONResponse({"message": "Successfully Updated!"}, 200)
+    return ORJSONResponse({"message": "Update Failed!"}, 403)
+
+
+@router.post("/forgot_password", status_code=status.HTTP_200_OK)
+async def forgot_password(ufp: UserForgotPassword) -> ORJSONResponse:  # type: ignore
+    """Register user API."""
+    user = await User.Collection.find_by_email(ufp.email)
+    if isinstance(user, User):
+        User.send_reset_code(await create_code(ObjectId(user.id), True), user.email)
+        return ORJSONResponse({"message": "Reset password email sent!"}, 200)
+    else:
+        return ORJSONResponse({"message": "Failed to process forgot password!"}, 403)
+
+
+@router.post("/reset_password", status_code=status.HTTP_200_OK)
+async def reset_password(request: Request, urp: UserResetPassword) -> ORJSONResponse:  # type: ignore
+    """Register user API."""
+    if (
+        user_id := await verify_code(urp.code, True)
+    ) and await User.Collection.update_by_id(
+        user_id,
+        {
+            "$set": {
+                "password": pbkdf2_sha512.hash(urp.password).encode(),
+                "is_activated": True,
+            }
+        },
+    ):
+        await invalidate_token(user_id)
+        return ORJSONResponse({"message": "Password reset successfully!"}, 200)
+
+    return ORJSONResponse({"message": "Failed to reset password!"}, 403)

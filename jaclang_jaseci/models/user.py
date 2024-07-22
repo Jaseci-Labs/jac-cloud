@@ -92,6 +92,11 @@ class User(UserCommon):
         pass
 
     @staticmethod
+    def send_reset_code(code: str, email: str) -> None:
+        """Send verification code."""
+        pass
+
+    @staticmethod
     def sso_mapper(open_id: OpenID) -> dict[str, object]:
         """Send verification code."""
         return {}
