@@ -1,10 +1,14 @@
 """User APIs."""
 
+import json
+
 from bson import ObjectId
 
 from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 from fastapi.responses import ORJSONResponse
+
+import orjson
 
 from passlib.hash import pbkdf2_sha512
 
@@ -34,6 +38,14 @@ User = User.model()  # type: ignore[misc]
 @router.post("/register", status_code=status.HTTP_200_OK)
 async def register(request: Request, req: User.register_type()) -> ORJSONResponse:  # type: ignore
     """Register user API."""
+    log_dict = {
+        "api_name": "register",
+        "caller_name": req.email,
+        "payload": json.dumps(req.model_dump_json()),
+    }
+    log_dict["extra_fields"] = list(log_dict.keys())
+    logger.info(f"Incoming call: {log_dict}", extra=log_dict)
+
     JCONTEXT.set(JacContext(request, save_on_exit=False))
     async with await Root.Collection.get_session() as session:
         async with session.start_transaction():
@@ -56,9 +68,17 @@ async def register(request: Request, req: User.register_type()) -> ORJSONRespons
                 await session.abort_transaction()
 
     if result:
-        return ORJSONResponse({"message": "Successfully Registered!"}, 201)
+        resp = ORJSONResponse({"message": "Successfully Registered!"}, 201)
     else:
-        return ORJSONResponse({"message": "Registration Failed!"}, 409)
+        resp = ORJSONResponse({"message": "Registration Failed!"}, 409)
+
+    log_dict["response"] = json.dumps(orjson.loads(resp.body))
+    log_dict["extra_fields"] = list(log_dict.keys())
+    logger.info(
+        f"Returning call: {log_dict}",
+        extra=log_dict,
+    )
+    return resp
 
 
 @router.post("/verify")
@@ -75,6 +95,14 @@ async def verify(req: UserVerification) -> ORJSONResponse:
 @router.post("/login")
 async def root(req: UserRequest) -> ORJSONResponse:
     """Login user API."""
+    log_dict = {
+        "api_name": "login",
+        "caller_name": req.email,
+        "payload": json.dumps(req.model_dump_json()),
+    }
+    log_dict["extra_fields"] = list(log_dict.keys())
+    logger.info(f"Incoming call: {log_dict}", extra=log_dict)
+
     user: User = await User.Collection.find_by_email(req.email)  # type: ignore
     if not user or not pbkdf2_sha512.verify(req.password, user.password):
         raise HTTPException(status_code=400, detail="Invalid Email/Password!")
@@ -89,7 +117,15 @@ async def root(req: UserRequest) -> ORJSONResponse:
     user_json = user.serialize()
     token = await create_token(user_json)
 
-    return ORJSONResponse(content={"token": token, "user": user_json})
+    resp = {"token": token, "user": user_json}
+    log_dict["response"] = json.dumps(resp)
+    log_dict["extra_fields"] = list(log_dict.keys())
+    logger.info(
+        f"Returning call: {log_dict}",
+        extra=log_dict,
+    )
+
+    return ORJSONResponse(content=resp)
 
 
 @router.post(

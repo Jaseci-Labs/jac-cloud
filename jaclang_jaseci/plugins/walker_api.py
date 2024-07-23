@@ -3,6 +3,7 @@
 from asyncio import get_event_loop
 from dataclasses import Field, _MISSING_TYPE, dataclass, is_dataclass
 from inspect import iscoroutine
+import json
 from os import getenv
 from pydoc import locate
 from re import compile
@@ -29,7 +30,7 @@ from starlette.datastructures import UploadFile as BaseUploadFile
 
 from .common import JCONTEXT, JacContext
 from ..securities import authenticator
-from ..utils import make_optional
+from ..utils import logger, make_optional
 
 
 T = TypeVar("T")
@@ -277,10 +278,40 @@ def populate_apis(cls: type) -> None:
             jctx = JacContext(request=request, entry=node)
             JCONTEXT.set(jctx)
 
+            caller = getattr(request, "auth_user", "")
+            log_dict = {
+                "api_name": cls.__name__,
+                "caller_name": caller.email or "",
+                "payload": json.dumps(await request.json()),
+                # "payload": "",
+                "entry_node": node,
+            }
+            log_msg = str(
+                f"Incoming call from {log_dict["caller_name"]}"
+                f" to {log_dict["api_name"]}"
+                f" with payload: {log_dict["payload"]}"
+                f" at entry node: {log_dict["entry_node"]}"
+            )
+            log_dict["extra_fields"] = list(log_dict.keys())
+            logger.info(log_msg, extra=log_dict)
             wlk: WalkerAnchor = cls(**body, **pl["query"], **pl["files"])._jac_
             await wlk.spawn_call(await jctx.get_entry())
             await jctx.clean_up()
-            return ORJSONResponse(jctx.response(wlk.returns))
+            resp = jctx.response(wlk.returns)
+            log_dict["api_response"] = json.dumps(resp)
+            log_dict["extra_fields"] = list(log_dict.keys())
+            log_msg = str(
+                f"Returning call from {log_dict["caller_name"]}"
+                f" to {log_dict["api_name"]}"
+                f" with payload: {log_dict["payload"]}"
+                f" at entry node: {log_dict["entry_node"]}"
+                f" with response: {log_dict["api_response"]}"
+            )
+            logger.info(
+                log_msg,
+                extra=log_dict,
+            )
+            return ORJSONResponse(resp)
 
         async def api_root(
             request: Request,
