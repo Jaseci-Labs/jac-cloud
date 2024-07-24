@@ -113,18 +113,12 @@ def add_elastic_log_handler(logger_instance: logging.Logger, index: str, under_t
                                 ),
                                 "message": f"Stopping process for {elastic_index}",
                                 "level": "SYSTEM",
-                            },
-                            logger=child_logger,
+                            }
                         )
                         # end of temporary code
                         break
                     elastic_record = format_elastic_record(record)
-                    child_logger.info("=============POSTING TO ELASTIC=============")
-                    child_logger.info(f"/{elastic_index}/_doc/")
-                    child_logger.info(elastic_record)
-                    res = ElasticConnector.post(f"/{elastic_index}/_doc/", payload=elastic_record)
-                    child_logger.info(res)
-                    child_logger.info(res.json())
+                    ElasticConnector.post(f"/{elastic_index}/_doc/", payload=elastic_record)
                 except Exception as e:
                     child_logger.error("Error in elastic log worker", e)
                     pass
