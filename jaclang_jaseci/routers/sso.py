@@ -28,6 +28,7 @@ from ..models import NULL_BYTES, User
 from ..models.ephemerals import AttachSSO, DetachSSO
 from ..plugins import JCONTEXT, JacContext, Root
 from ..securities import authenticator, create_code, create_token
+from ..sso import AppleSSO
 from ..utils import logger
 
 router = APIRouter(prefix="/sso", tags=["sso"])
@@ -35,6 +36,7 @@ router = APIRouter(prefix="/sso", tags=["sso"])
 User = User.model()  # type: ignore[misc]
 
 SUPPORTED_PLATFORMS: dict[str, type[SSOBase]] = {
+    "APPLE": AppleSSO,
     "FACEBOOK": FacebookSSO,
     "FITBIT": FitbitSSO,
     "GITHUB": GithubSSO,
@@ -76,24 +78,42 @@ for platform, cls in SUPPORTED_PLATFORMS.items():
 
 @router.get("/{platform}/{operation}")
 async def sso_operation(
-    platform: str, operation: str, redirect_uri: Optional[str] = None
+    request: Request,
+    platform: str,
+    operation: str,
+    redirect_uri: Optional[str] = None,
+    state: str | None = None,
 ) -> Response:
     """SSO Login API."""
     if sso := SSO.get(platform):
         with sso:
+            params = request.query_params._dict
             return await sso.get_login_redirect(
-                redirect_uri=redirect_uri
-                or f"{SSO_HOST}/{platform}/{operation}/callback"
+                redirect_uri=params.pop("redirect_uri", None)
+                or f"{SSO_HOST}/{platform}/{operation}/callback",
+                state=params.pop("state", None),
+                params=params,
             )
     return ORJSONResponse({"message": "Feature not yet implemented!"}, 501)
 
 
 @router.get("/{platform}/{operation}/callback")
-async def sso_callback(request: Request, platform: str, operation: str) -> Response:
+async def sso_callback(
+    request: Request, platform: str, operation: str, redirect_uri: str | None = None
+) -> Response:
     """SSO Login API."""
     if sso := SSO.get(platform):
         with sso:
-            if open_id := await sso.verify_and_process(request):
+            if open_id := await sso.verify_and_process(
+                request,
+                redirect_uri=redirect_uri
+                or f"{SSO_HOST}/{platform}/{operation}/callback",
+                params=(
+                    {"client_secret": sso.client_secret}
+                    if isinstance(sso, AppleSSO)
+                    else None
+                ),
+            ):
                 match operation:
                     case "login":
                         return await login(platform, open_id)
