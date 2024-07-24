@@ -1,9 +1,9 @@
 """Walker API Plugin."""
 
+import json
 from asyncio import get_event_loop
 from dataclasses import Field, _MISSING_TYPE, dataclass, is_dataclass
 from inspect import iscoroutine
-import json
 from os import getenv
 from pydoc import locate
 from re import compile
@@ -279,11 +279,15 @@ def populate_apis(cls: type) -> None:
             JCONTEXT.set(jctx)
 
             caller = getattr(request, "auth_user", "")
+            try:
+                payload_json = json.dumps(await request.json())
+            except Exception:
+                payload_json = ""
+
             log_dict = {
                 "api_name": cls.__name__,
                 "caller_name": caller.email or "",
-                "payload": json.dumps(await request.json()),
-                # "payload": "",
+                "payload": payload_json,
                 "entry_node": node,
             }
             log_msg = str(
