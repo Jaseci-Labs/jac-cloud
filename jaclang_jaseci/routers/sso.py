@@ -108,11 +108,6 @@ async def sso_callback(
                 request,
                 redirect_uri=redirect_uri
                 or f"{SSO_HOST}/{platform}/{operation}/callback",
-                params=(
-                    {"client_secret": sso.client_secret}
-                    if isinstance(sso, AppleSSO)
-                    else None
-                ),
             ):
                 match operation:
                     case "login":

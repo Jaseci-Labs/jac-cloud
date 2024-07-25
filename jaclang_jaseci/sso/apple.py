@@ -47,6 +47,26 @@ class AppleSSO(SSOBase):
                     return algorithms.RSAAlgorithm.from_jwk(dumps(key))
         return None
 
+    async def verify_and_process(  # type: ignore[override]
+        self,
+        request: Request,
+        *,
+        params: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, Any]] = None,
+        redirect_uri: Optional[str] = None,
+        convert_response: Union[Literal[True], Literal[False]] = True,
+    ) -> Union[Optional[OpenID], Optional[Dict[str, Any]]]:
+        """Verify and process Apple SSO."""
+        if params and (id_token := request.query_params.get("id_token")):
+            return await self.get_open_id(id_token)
+        return await super().verify_and_process(
+            request,
+            params=params,
+            headers=headers,
+            redirect_uri=redirect_uri,
+            convert_response=convert_response,
+        )
+
     async def process_login(  # type: ignore[override]
         self,
         code: str,
@@ -87,6 +107,8 @@ class AppleSSO(SSOBase):
         if pkce_code_verifier:
             params.update({"code_verifier": pkce_code_verifier})
 
+        params.update({"client_secret": self.client_secret})
+
         token_url, headers, body = self.oauth_client.prepare_token_request(
             await self.token_endpoint,
             authorization_response=current_url,
@@ -110,14 +132,17 @@ class AppleSSO(SSOBase):
             self._refresh_token = content.get("refresh_token")
             if id_token := content.get("id_token"):
                 self._id_token = id_token
-                identity_data: dict = decode(
-                    id_token,
-                    cast(RSAPublicKey, await self.get_public_key(id_token)),
-                    algorithms=["RS256"],
-                    audience=self.client_id,
-                    issuer="https://appleid.apple.com",
-                )
-                return OpenID(
-                    id=identity_data.get("sub"), email=identity_data.get("email")
-                )
+                return await self.get_open_id(id_token)
             raise HTTPException(401, "Failed to get access token!")
+
+    async def get_open_id(self, id_token: str) -> OpenID:
+        """Get OpenID from id_tokens provided by Apple."""
+        identity_data: dict = decode(
+            id_token,
+            cast(RSAPublicKey, await self.get_public_key(id_token)),
+            algorithms=["RS256"],
+            audience=self.client_id,
+            issuer="https://appleid.apple.com",
+        )
+
+        return OpenID(id=identity_data.get("sub"), email=identity_data.get("email"))
