@@ -1,6 +1,7 @@
 """User APIs."""
 
 import json
+from os import getenv
 
 from bson import ObjectId
 
@@ -30,6 +31,8 @@ from ..securities import (
 )
 from ..utils import Emailer, logger
 
+
+RESTRICT_UNVERIFIED_USER = getenv("RESTRICT_UNVERIFIED_USER") == "true"
 router = APIRouter(prefix="/user", tags=["user"])
 
 User = User.model()  # type: ignore[misc]
@@ -54,11 +57,10 @@ async def register(request: Request, req: User.register_type()) -> ORJSONRespons
                 root = await Root.register(session=session)
                 req_obf: dict = req.obfuscate()
                 req_obf["root_id"] = root.id
-                if not Emailer.has_client():
-                    req_obf["is_activated"] = True
+                is_activated = req_obf["is_activated"] = not Emailer.has_client()
 
                 result = await User.Collection.insert_one(req_obf, session=session)
-                if result and not req_obf["is_activated"]:
+                if result and not is_activated:
                     User.send_verification_code(await create_code(result), req.email)
                 await session.commit_transaction()
             except Exception:
@@ -79,6 +81,21 @@ async def register(request: Request, req: User.register_type()) -> ORJSONRespons
         extra=log_dict,
     )
     return resp
+
+
+@router.post(
+    "/send-verification-code",
+    status_code=status.HTTP_200_OK,
+    dependencies=authenticator,
+)
+async def send_verification_code(request: Request) -> ORJSONResponse:
+    """Verify user API."""
+    user = request.auth_user
+    if user.is_activated:
+        return ORJSONResponse({"message": "Account is already verified!"}, 400)
+    else:
+        User.send_verification_code(await create_code(ObjectId(user.id)), user.email)
+        return ORJSONResponse({"message": "Successfully sent verification code!"}, 200)
 
 
 @router.post("/verify")
@@ -107,7 +124,7 @@ async def root(req: UserRequest) -> ORJSONResponse:
     if not user or not pbkdf2_sha512.verify(req.password, user.password):
         raise HTTPException(status_code=400, detail="Invalid Email/Password!")
 
-    if not user.is_activated:
+    if RESTRICT_UNVERIFIED_USER and not user.is_activated:
         User.send_verification_code(await create_code(ObjectId(user.id)), req.email)
         raise HTTPException(
             status_code=400,

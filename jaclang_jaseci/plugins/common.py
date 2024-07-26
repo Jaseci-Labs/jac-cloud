@@ -39,16 +39,41 @@ from motor.motor_asyncio import AsyncIOMotorClientSession
 from orjson import dumps
 
 from pymongo import ASCENDING, DeleteMany, DeleteOne, InsertOne, UpdateMany, UpdateOne
+from pymongo.errors import ConnectionFailure, OperationFailure
 
 from ..collections import BaseCollection
 from ..utils import logger
 
 
 SHOW_ENDPOINT_RETURNS = getenv("SHOW_ENDPOINT_RETURNS", False)
+SESSION_MAX_COMMIT_RETRY = int(getenv("SESSION_MAX_COMMIT_RETRY") or "1")
 TARGET_NODE_REGEX = compile(r"^(n|e):([^:]*):([a-f\d]{24})$", IGNORECASE)
 JCONTEXT: ContextVar = ContextVar("JCONTEXT")
 T = TypeVar("T")
 DA = TypeVar("DA", bound="DocArchitype")
+
+
+async def commit_session_with_retry(session: AsyncIOMotorClientSession) -> None:
+    """Commit session with retry."""
+    retry = 0
+    max_retry = SESSION_MAX_COMMIT_RETRY
+    while retry <= max_retry:
+        try:
+            await session.commit_transaction()
+            break
+        except (ConnectionFailure, OperationFailure) as ex:
+            if ex.has_error_label("UnknownTransactionCommitResult"):
+                retry += 1
+                logger.error(
+                    "Error commiting session! " f"Retrying [{retry}/{max_retry}] ..."
+                )
+                continue
+            logger.error(f"Error commiting session after max retry [{max_retry}] !")
+            raise
+        except Exception:
+            await session.abort_transaction()
+            logger.error("Error commiting session!")
+            raise
 
 
 class JType(Enum):
@@ -479,13 +504,8 @@ class DocArchitype(Generic[DA]):
         """Upsert Architype with session."""
         async with await ArchCollection.get_session() as session:
             async with session.start_transaction():
-                try:
-                    await self._save(session)
-                    await session.commit_transaction()
-                except Exception:
-                    await session.abort_transaction()
-                    logger.exception("Error saving node!")
-                    raise
+                await self._save(session)
+                await commit_session_with_retry(session)
 
     def destroy(self, session: Optional[AsyncIOMotorClientSession] = None) -> None:
         """Sync Destroy Architype."""
@@ -501,13 +521,8 @@ class DocArchitype(Generic[DA]):
         """Destroy Architype with session."""
         async with await ArchCollection.get_session() as session:
             async with session.start_transaction():
-                try:
-                    await self._destroy(session)
-                    await session.commit_transaction()
-                except Exception:
-                    await session.abort_transaction()
-                    logger.exception(f"Error destroying {self._jac_type_.name}!")
-                    raise
+                await self._destroy(session)
+                await commit_session_with_retry(session)
 
     async def is_allowed(
         self, to: "DocArchitype", jctx: Optional["JacContext"] = None
@@ -1256,16 +1271,12 @@ class JacContext:
             self.save_on_exit = False
             async with await ArchCollection.get_session() as session:
                 async with session.start_transaction():
-                    try:
-                        for arch in self.__del__.values():
-                            await arch._destroy(session)
-                        for arch in self.__mem__.values():
-                            await arch._save(session)
-                        await session.commit_transaction()
-                    except Exception:
-                        await session.abort_transaction()
-                        logger.exception("Error syncing memories!")
-                        raise
+                    for arch in self.__del__.values():
+                        await arch._destroy(session)
+                    for arch in self.__mem__.values():
+                        await arch._save(session)
+                    await session.commit_transaction()
+                    await commit_session_with_retry(session)
 
 
 async def async_filter(

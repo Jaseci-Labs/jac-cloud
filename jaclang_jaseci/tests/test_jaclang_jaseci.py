@@ -85,7 +85,6 @@ class JacLangJaseciTests(IsolatedAsyncioTestCase):
         )
 
         if not expect_error:
-            print(res.json())
             res.raise_for_status()
             return res.json()
         else:
