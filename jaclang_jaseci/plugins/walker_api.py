@@ -278,7 +278,7 @@ def populate_apis(cls: type) -> None:
             jctx = JacContext(request=request, entry=node)
             JCONTEXT.set(jctx)
 
-            caller = getattr(request, "auth_user", "")
+            caller = getattr(request, "auth_user", None)
             try:
                 payload_json = json.dumps(await request.json())
             except Exception:
@@ -286,15 +286,15 @@ def populate_apis(cls: type) -> None:
 
             log_dict = {
                 "api_name": cls.__name__,
-                "caller_name": caller.email or "",
+                "caller_name": caller.email if caller else "",
                 "payload": payload_json,
                 "entry_node": node,
             }
             log_msg = str(
-                f"Incoming call from {log_dict["caller_name"]}"
-                f" to {log_dict["api_name"]}"
-                f" with payload: {log_dict["payload"]}"
-                f" at entry node: {log_dict["entry_node"]}"
+                f"Incoming call from {log_dict['caller_name']}"
+                f" to {log_dict['api_name']}"
+                f" with payload: {log_dict['payload']}"
+                f" at entry node: {log_dict['entry_node']}"
             )
             log_dict["extra_fields"] = list(log_dict.keys())
             logger.info(log_msg, extra=log_dict)
@@ -305,11 +305,11 @@ def populate_apis(cls: type) -> None:
             log_dict["api_response"] = json.dumps(resp)
             log_dict["extra_fields"] = list(log_dict.keys())
             log_msg = str(
-                f"Returning call from {log_dict["caller_name"]}"
-                f" to {log_dict["api_name"]}"
-                f" with payload: {log_dict["payload"]}"
-                f" at entry node: {log_dict["entry_node"]}"
-                f" with response: {log_dict["api_response"]}"
+                f"Returning call from {log_dict['caller_name']}"
+                f" to {log_dict['api_name']}"
+                f" with payload: {log_dict['payload']}"
+                f" at entry node: {log_dict['entry_node']}"
+                f" with response: {log_dict['api_response']}"
             )
             logger.info(
                 log_msg,

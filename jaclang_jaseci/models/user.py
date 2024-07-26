@@ -76,12 +76,15 @@ class User(UserCommon):
             if callable(val.default_factory):
                 user_model[key] = (val.annotation, val.default_factory())
             else:
-                user_model[key] = (val.annotation, ...)
+                user_model[key] = (
+                    val.annotation,
+                    ... if val.is_required() else val.default,
+                )
 
         user_model["password"] = (str, ...)
         user_model.pop("id", None)
         user_model.pop("root_id", None)
-        # user_model.pop("is_activated", None)
+        user_model.pop("is_activated", None)
         user_model.pop("sso", None)
 
         return create_model("UserRegister", __base__=UserCommon, **user_model)
