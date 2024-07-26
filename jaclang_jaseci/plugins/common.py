@@ -932,6 +932,28 @@ class EdgeArchitype(_EdgeArchitype, DocArchitype["EdgeArchitype"]):
 
         return self._jac_doc_
 
+    def allow_root(self, root: Union[DocAnchor, "Root"], write: bool = False) -> None:
+        """Allow all access from target root graph to current Architype."""
+        if isinstance(root, DocAnchor):
+            self._jac_doc_.allow_root(root.id, write)
+        elif isinstance(root, Root):
+            self._jac_doc_.allow_root(root._jac_doc_.id, write)
+
+    def disallow_root(self, root: Union[DocAnchor, "Root"]) -> None:
+        """Disallow all access from target root graph to current Architype."""
+        if isinstance(root, DocAnchor):
+            self._jac_doc_.disallow_root(root.id)
+        elif isinstance(root, Root):
+            self._jac_doc_.disallow_root(root._jac_doc_.id)
+
+    def unrestrict(self, write: bool = False) -> None:
+        """Allow everyone to access current Architype."""
+        self._jac_doc_.unrestrict(write)
+
+    def restrict(self) -> None:
+        """Disallow others to access current Architype."""
+        self._jac_doc_.restrict()
+
 
 @dataclass(eq=False)
 class EdgeAnchor(_EdgeAnchor):
