@@ -14,7 +14,6 @@ from fastapi_sso.sso.facebook import FacebookSSO
 from fastapi_sso.sso.fitbit import FitbitSSO
 from fastapi_sso.sso.github import GithubSSO
 from fastapi_sso.sso.gitlab import GitlabSSO
-from fastapi_sso.sso.google import GoogleSSO
 from fastapi_sso.sso.kakao import KakaoSSO
 from fastapi_sso.sso.line import LineSSO
 from fastapi_sso.sso.linkedin import LinkedInSSO
@@ -28,7 +27,7 @@ from ..models import NULL_BYTES, User
 from ..models.ephemerals import AttachSSO, DetachSSO
 from ..plugins import JCONTEXT, JacContext, Root
 from ..securities import authenticator, create_code, create_token
-from ..sso import AppleSSO
+from ..sso import AppleSSO, GoogleSSO
 from ..utils import logger
 
 router = APIRouter(prefix="/sso", tags=["sso"])
@@ -42,6 +41,8 @@ SUPPORTED_PLATFORMS: dict[str, type[SSOBase]] = {
     "GITHUB": GithubSSO,
     "GITLAB": GitlabSSO,
     "GOOGLE": GoogleSSO,
+    "GOOGLE_ANDROID": GoogleSSO,
+    "GOOGLE_IOS": GoogleSSO,
     "KAKAO": KakaoSSO,
     "LINE": LineSSO,
     "LINKEDIN": LinkedInSSO,
@@ -56,13 +57,11 @@ SSO: dict[str, SSOBase] = {}
 SSO_HOST = getenv("SSO_HOST", "http://localhost:8000/sso")
 
 for platform, cls in SUPPORTED_PLATFORMS.items():
-    if (client_id := getenv(f"{platform}_CLIENT_ID")) and (
-        client_secret := getenv(f"{platform}_CLIENT_SECRET")
-    ):
-        options: dict[str, object] = {
-            "client_id": client_id,
-            "client_secret": client_secret,
-        }
+    if client_id := getenv(f"{platform}_CLIENT_ID"):
+        options: dict[str, object] = {"client_id": client_id}
+
+        if client_secret := getenv(f"{platform}_CLIENT_SECRET"):
+            options["client_secret"] = client_secret
 
         if base_endpoint_url := getenv(f"{platform}_BASE_ENDPOINT_URL"):
             options["base_endpoint_url"] = base_endpoint_url

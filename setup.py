@@ -31,6 +31,7 @@ setup(
         "sendgrid==6.11.0",
         "nest-asyncio==1.6.0",
         "fastapi-sso==0.15.0",
+        "google-auth==2.32.0",
     ],
     package_data={},
     entry_points={

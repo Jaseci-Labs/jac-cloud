@@ -26,6 +26,7 @@ class AppleSSO(SSOBase):
     provider = "apple"
     base_url = "https://appleid.apple.com/auth"
     scope: ClassVar = ["name", "email"]
+    issuer = "https://appleid.apple.com"
 
     async def get_discovery_document(self) -> DiscoveryDocument:
         """Get document containing handy urls."""
@@ -57,7 +58,7 @@ class AppleSSO(SSOBase):
         convert_response: Union[Literal[True], Literal[False]] = True,
     ) -> Union[Optional[OpenID], Optional[Dict[str, Any]]]:
         """Verify and process Apple SSO."""
-        if params and (id_token := request.query_params.get("id_token")):
+        if id_token := request.query_params.get("id_token"):
             return await self.get_open_id(id_token)
         return await super().verify_and_process(
             request,
@@ -142,7 +143,7 @@ class AppleSSO(SSOBase):
             cast(RSAPublicKey, await self.get_public_key(id_token)),
             algorithms=["RS256"],
             audience=self.client_id,
-            issuer="https://appleid.apple.com",
+            issuer=self.issuer,
         )
 
         return OpenID(id=identity_data.get("sub"), email=identity_data.get("email"))
