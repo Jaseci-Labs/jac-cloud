@@ -524,7 +524,14 @@ class DocArchitype(Generic[DA]):
         ):
             return False
 
-        if (isinstance(self, Root) and from_jd.id == to_root) or from_root == to_root:
+        jroot = jctx.root
+
+        if (
+            (isinstance(self, Root) and from_jd.id == to_root)
+            or from_root == to_root
+            or jroot._jac_doc_.id == to_root
+            or jroot == to
+        ):
             to_jd.current_access_level = 1
             return True
 
