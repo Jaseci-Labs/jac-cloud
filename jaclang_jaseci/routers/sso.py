@@ -214,27 +214,34 @@ async def register(request: Request, platform: str, open_id: OpenID) -> Response
     async with await Root.Collection.get_session() as session:
         async with session.start_transaction():
             try:
-                root = await Root.register(session=session)
-                ureq: dict[str, object] = User.register_type()(
-                    email=open_id.email,
-                    password=NULL_BYTES,
-                    **User.sso_mapper(open_id),
-                ).obfuscate()
-                ureq["root_id"] = root.id
-                ureq["is_activated"] = True
-                ureq["sso"] = {platform: {"id": open_id.id, "email": open_id.email}}
-
-                result = await User.Collection.insert_one(ureq, session=session)
+                if not await User.Collection.update_one(
+                    {"email": open_id.email},
+                    {
+                        "$set": {
+                            f"sso.{platform}": {
+                                "id": open_id.id,
+                                "email": open_id.email,
+                            }
+                        }
+                    },
+                    session=session,
+                ):
+                    root = await Root.register(session=session)
+                    ureq: dict[str, object] = User.register_type()(
+                        email=open_id.email,
+                        password=NULL_BYTES,
+                        **User.sso_mapper(open_id),
+                    ).obfuscate()
+                    ureq["root_id"] = root.id
+                    ureq["is_activated"] = True
+                    ureq["sso"] = {platform: {"id": open_id.id, "email": open_id.email}}
+                    await User.Collection.insert_one(ureq, session=session)
                 await session.commit_transaction()
+                return await login(platform, open_id)
             except Exception:
                 logger.exception("Error commiting user registration!")
-                result = None
-
                 await session.abort_transaction()
-    if result:
-        return await login(platform, open_id)
-    else:
-        return ORJSONResponse({"message": "Registration Failed!"}, 409)
+    return ORJSONResponse({"message": "Registration Failed!"}, 409)
 
 
 async def attach(platform: str, open_id: OpenID) -> Response:
