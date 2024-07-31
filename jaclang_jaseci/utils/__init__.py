@@ -53,13 +53,15 @@ class ElasticConnector:
         cls.url = url
         cls.headers = {
             "Content-Type": "application/json",
-            "Authorization": f"ApiKey {os.getenv("ELASTIC_API_KEY")}"
+            "Authorization": f"ApiKey {os.getenv('ELASTIC_API_KEY')}",
         }
 
     @classmethod
     def post(cls, url_suffix: str, payload: dict = None) -> dict:
         """Post to Elastic."""
-        return requests.post(f"{cls.url}/{url_suffix}", headers=cls.headers, json=payload)
+        return requests.post(
+            f"{cls.url}/{url_suffix}", headers=cls.headers, json=payload
+        )
 
 
 def format_elastic_record(record: dict) -> dict:
@@ -81,7 +83,9 @@ def format_elastic_record(record: dict) -> dict:
     return elastic_record
 
 
-def add_elastic_log_handler(logger_instance: logging.Logger, index: str, under_test: bool = False) -> None:
+def add_elastic_log_handler(
+    logger_instance: logging.Logger, index: str, under_test: bool = False
+) -> None:
     has_queue_handler = any(
         isinstance(h, logging.handlers.QueueHandler) for h in logger_instance.handlers
     )
@@ -113,12 +117,14 @@ def add_elastic_log_handler(logger_instance: logging.Logger, index: str, under_t
                                 ),
                                 "message": f"Stopping process for {elastic_index}",
                                 "level": "SYSTEM",
-                            }
+                            },
                         )
                         # end of temporary code
                         break
                     elastic_record = format_elastic_record(record)
-                    ElasticConnector.post(f"/{elastic_index}/_doc/", payload=elastic_record)
+                    ElasticConnector.post(
+                        f"/{elastic_index}/_doc/", payload=elastic_record
+                    )
                 except Exception as e:
                     child_logger.error("Error in elastic log worker", e)
                     pass
@@ -141,9 +147,7 @@ def start_elastic_logger(index: str) -> None:
         index not in LOG_QUEUES
         and multiprocessing.current_process().name == "MainProcess"
     ):
-        LOG_QUEUES[index] = add_elastic_log_handler(
-            logger, index, False
-        )
+        LOG_QUEUES[index] = add_elastic_log_handler(logger, index, False)
 
 
 __all__ = [
