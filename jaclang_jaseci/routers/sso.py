@@ -58,10 +58,10 @@ SSO_HOST = getenv("SSO_HOST", "http://localhost:8000/sso")
 
 for platform, cls in SUPPORTED_PLATFORMS.items():
     if client_id := getenv(f"{platform}_CLIENT_ID"):
-        options: dict[str, object] = {"client_id": client_id}
-
-        if client_secret := getenv(f"{platform}_CLIENT_SECRET"):
-            options["client_secret"] = client_secret
+        options: dict[str, object] = {
+            "client_id": client_id,
+            "client_secret": getenv(f"{platform}_CLIENT_SECRET"),
+        }
 
         if base_endpoint_url := getenv(f"{platform}_BASE_ENDPOINT_URL"):
             options["base_endpoint_url"] = base_endpoint_url
