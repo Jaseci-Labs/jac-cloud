@@ -216,7 +216,7 @@ async def register(request: Request, platform: str, open_id: OpenID) -> Response
             try:
                 root = await Root.register(session=session)
                 ureq: dict[str, object] = User.register_type()(
-                    email=f"{root.id}-sso@jac-lang.org",
+                    email=open_id.email,
                     password=NULL_BYTES,
                     **User.sso_mapper(open_id),
                 ).obfuscate()
