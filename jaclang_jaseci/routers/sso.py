@@ -34,6 +34,7 @@ router = APIRouter(prefix="/sso", tags=["sso"])
 
 User = User.model()  # type: ignore[misc]
 
+CUSTOM_PLATFORMS = [AppleSSO]
 SUPPORTED_PLATFORMS: dict[str, type[SSOBase]] = {
     "APPLE": AppleSSO,
     "FACEBOOK": FacebookSSO,
@@ -71,6 +72,9 @@ for platform, cls in SUPPORTED_PLATFORMS.items():
 
         if allow_insecure_http := getenv(f"{platform}_ALLOW_INSECURE_HTTP"):
             options["allow_insecure_http"] = allow_insecure_http == "true"
+
+        if cls in CUSTOM_PLATFORMS:
+            options["platform"] = platform
 
         SSO[platform.lower()] = cls(**options)
 
