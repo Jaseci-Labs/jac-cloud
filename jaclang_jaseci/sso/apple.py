@@ -218,4 +218,7 @@ class AppleSSO(SSOBase):
             issuer=self.issuer,
         )
 
+        if identity_data.get("email_verified") is not True:
+            raise HTTPException(403, "You're trying to attach a non verified account!")
+
         return OpenID(id=identity_data.get("sub"), email=identity_data.get("email"))

@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, Literal, Optional, Union
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from fastapi_sso.sso.base import OpenID
 from fastapi_sso.sso.google import GoogleSSO as _GoogleSSO
@@ -43,5 +43,8 @@ class GoogleSSO(_GoogleSSO):
         identity_data: dict = decode(
             id_token, certs=get(self.oauth_cert_url).json(), audience=self.client_id
         )
+
+        if identity_data.get("email_verified") is not True:
+            raise HTTPException(403, "You're trying to attach a non verified account!")
 
         return OpenID(id=identity_data.get("sub"), email=identity_data.get("email"))

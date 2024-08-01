@@ -225,7 +225,8 @@ async def register(request: Request, platform: str, open_id: OpenID) -> Response
                             f"sso.{platform}": {
                                 "id": open_id.id,
                                 "email": open_id.email,
-                            }
+                            },
+                            "is_activated": True,
                         }
                     },
                     session=session,
