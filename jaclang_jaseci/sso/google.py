@@ -1,6 +1,6 @@
-"""Apple SSO."""
+"""Google SSO."""
 
-from typing import Any, Dict, Literal, Optional, Union
+from typing import Any, Dict, Literal
 
 from fastapi import HTTPException, Request
 
@@ -22,11 +22,11 @@ class GoogleSSO(_GoogleSSO):
         self,
         request: Request,
         *,
-        params: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, Any]] = None,
-        redirect_uri: Optional[str] = None,
-        convert_response: Union[Literal[True], Literal[False]] = True,
-    ) -> Union[Optional[OpenID], Optional[Dict[str, Any]]]:
+        params: Dict[str, Any] | None = None,
+        headers: Dict[str, Any] | None = None,
+        redirect_uri: str | None = None,
+        convert_response: Literal[True] | Literal[False] = True,
+    ) -> OpenID | Dict[str, Any] | None:
         """Verify and process Apple SSO."""
         if id_token := request.query_params.get("id_token"):
             return await self.get_open_id(id_token)
@@ -40,11 +40,16 @@ class GoogleSSO(_GoogleSSO):
 
     async def get_open_id(self, id_token: str) -> OpenID:
         """Get OpenID from id_tokens provided by Apple."""
-        identity_data: dict = decode(
+        raw: dict = decode(
             id_token, certs=get(self.oauth_cert_url).json(), audience=self.client_id
         )
 
-        if identity_data.get("email_verified") is not True:
+        if raw.get("email_verified") is not True:
             raise HTTPException(403, "You're trying to attach a non verified account!")
 
-        return OpenID(id=identity_data.get("sub"), email=identity_data.get("email"))
+        return OpenID(
+            id=raw.get("sub"),
+            email=raw.get("email"),
+            first_name=raw.get("given_name"),
+            last_name=raw.get("family_name"),
+        )

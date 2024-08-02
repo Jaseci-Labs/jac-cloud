@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from json import dumps
 from os import getenv
-from typing import Any, ClassVar, Dict, List, Literal, Optional, Union, cast
+from typing import Any, ClassVar, Dict, List, Literal, cast
 from warnings import warn
 
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
@@ -85,6 +85,7 @@ class AppleSSO(SSOBase):
         return {
             "authorization_endpoint": f"{self.base_url}/authorize",
             "token_endpoint": f"{self.base_url}/oauth2/v2/token",
+            "userinfo_endpoint": "",
         }
 
     async def get_client_secret(self) -> str:
@@ -101,7 +102,7 @@ class AppleSSO(SSOBase):
                 "iat": now,
                 "exp": now + timedelta(minutes=1),
             },
-            self.client_certificate,
+            str(self.client_certificate),
             algorithm="ES256",
             headers={"alg": "ES256", "kid": self.client_key},
         )
@@ -122,14 +123,14 @@ class AppleSSO(SSOBase):
         self,
         request: Request,
         *,
-        params: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, Any]] = None,
-        redirect_uri: Optional[str] = None,
-        convert_response: Union[Literal[True], Literal[False]] = True,
-    ) -> Union[Optional[OpenID], Optional[Dict[str, Any]]]:
+        params: Dict[str, Any] | None = None,
+        headers: Dict[str, Any] | None = None,
+        redirect_uri: str | None = None,
+        convert_response: Literal[True] | Literal[False] = True,
+    ) -> OpenID | Dict[str, Any] | None:
         """Verify and process Apple SSO."""
         if id_token := request.query_params.get("id_token"):
-            return await self.get_open_id(id_token)
+            return await self.get_open_id(id_token, params or {})
         return await super().verify_and_process(
             request,
             params=params,
@@ -143,12 +144,12 @@ class AppleSSO(SSOBase):
         code: str,
         request: Request,
         *,
-        params: Optional[Dict[str, Any]] = None,
-        additional_headers: Optional[Dict[str, Any]] = None,
-        redirect_uri: Optional[str] = None,
-        pkce_code_verifier: Optional[str] = None,
-        convert_response: Union[Literal[True], Literal[False]] = True,
-    ) -> Union[Optional[OpenID], Optional[Dict[str, Any]]]:
+        params: Dict[str, Any] | None = None,
+        additional_headers: Dict[str, Any] | None = None,
+        redirect_uri: str | None = None,
+        pkce_code_verifier: str | None = None,
+        convert_response: Literal[True] | Literal[False] = True,
+    ) -> OpenID | Dict[str, Any] | None:
         """Process login for Apple SSO."""
         if self._oauth_client is not None:  # type: ignore[has-type]
             self._oauth_client = None
@@ -205,12 +206,12 @@ class AppleSSO(SSOBase):
             self._refresh_token = content.get("refresh_token")
             if id_token := content.get("id_token"):
                 self._id_token = id_token
-                return await self.get_open_id(id_token)
+                return await self.get_open_id(id_token, params)
             raise HTTPException(401, "Failed to get access token!")
 
-    async def get_open_id(self, id_token: str) -> OpenID:
+    async def get_open_id(self, id_token: str, params: Dict[str, Any]) -> OpenID:
         """Get OpenID from id_tokens provided by Apple."""
-        identity_data: dict = decode(
+        raw: dict = decode(
             id_token,
             cast(RSAPublicKey, await self.get_public_key(id_token)),
             algorithms=["RS256"],
@@ -218,7 +219,12 @@ class AppleSSO(SSOBase):
             issuer=self.issuer,
         )
 
-        if identity_data.get("email_verified") is not True:
+        if raw.get("email_verified") is not True:
             raise HTTPException(403, "You're trying to attach a non verified account!")
 
-        return OpenID(id=identity_data.get("sub"), email=identity_data.get("email"))
+        return OpenID(
+            id=raw.get("sub"),
+            email=raw.get("email"),
+            first_name=raw.get("firstName") or params.get("first_name"),
+            last_name=raw.get("lastName") or params.get("last_name"),
+        )
