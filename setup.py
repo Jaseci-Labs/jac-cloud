@@ -23,7 +23,7 @@ setup(
         "pyjwt[crypto]==2.8.0",
         "passlib==1.7.4",
         "email-validator==2.1.0.post1",
-        "orjson==3.9.13",
+        "orjson>=3.9.13, <4.0.0",
         "redis==5.0.1",
         "types-redis==4.6.0.20240218",
         "python-multipart==0.0.9",
