@@ -2,9 +2,11 @@
 
 from setuptools import find_packages, setup
 
+VERSION = "0.2.0"
+
 setup(
     name="jaclang-jaseci",
-    version="2.0.0",
+    version=VERSION,
     packages=find_packages(include=["jaclang_jaseci", "jaclang_jaseci.*"]),
     install_requires=[
         "jaclang==0.7.15",
