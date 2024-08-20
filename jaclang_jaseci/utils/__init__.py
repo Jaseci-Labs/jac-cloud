@@ -47,6 +47,9 @@ def make_optional(cls: type) -> type:
 class ElasticConnector:
     """Elastic Connector."""
 
+    url: str = ""
+    headers: dict = {}
+
     @classmethod
     def configure(cls, url: str) -> None:
         """Configure Elastic Connector."""
@@ -57,14 +60,14 @@ class ElasticConnector:
         }
 
     @classmethod
-    def post(cls, url_suffix: str, payload: dict = None) -> dict:
+    def post(cls, url_suffix: str, payload: dict) -> requests.Response:
         """Post to Elastic."""
         return requests.post(
             f"{cls.url}/{url_suffix}", headers=cls.headers, json=payload
         )
 
 
-def format_elastic_record(record: dict) -> dict:
+def format_elastic_record(record: logging.LogRecord) -> dict:
     # Strip out color code from message before sending to elastic
     msg = record.getMessage()
     msg = re.sub(r"\033\[[0-9]*m", "", msg)
@@ -85,13 +88,13 @@ def format_elastic_record(record: dict) -> dict:
 
 def add_elastic_log_handler(
     logger_instance: logging.Logger, index: str, under_test: bool = False
-) -> None:
+) -> Optional[multiprocessing.Queue]:
     has_queue_handler = any(
-        isinstance(h, logging.handlers.QueueHandler) for h in logger_instance.handlers
+        isinstance(h, logging.handlers.QueueHandler) for h in logger_instance.handlers  # type: ignore[attr-defined]
     )
     if not has_queue_handler:
-        log_queue = multiprocessing.Queue()
-        queue_handler = logging.handlers.QueueHandler(log_queue)
+        log_queue: multiprocessing.Queue = multiprocessing.Queue()
+        queue_handler = logging.handlers.QueueHandler(log_queue)  # type: ignore[attr-defined]
         logger_instance.addHandler(queue_handler)
 
         def elastic_log_worker(elastic_index: str) -> None:
@@ -139,6 +142,7 @@ def add_elastic_log_handler(
             worker_proc.start()
 
         return log_queue
+    return None
 
 
 def start_elastic_logger(index: str) -> None:

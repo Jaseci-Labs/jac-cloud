@@ -32,7 +32,8 @@ setup(
         "nest-asyncio==1.6.0",
         "fastapi-sso==0.15.0",
         "google-auth==2.32.0",
-        "requests",
+        "requests>=2.32.3, <2.33.0",
+        "types-requests>=2.32.0, <2.33.0",
     ],
     package_data={},
     entry_points={
