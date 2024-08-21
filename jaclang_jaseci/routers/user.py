@@ -121,8 +121,16 @@ async def root(req: UserRequest) -> ORJSONResponse:
     logger.info(f"Incoming call: {log_dict}", extra=log_dict)
 
     user: User = await User.Collection.find_by_email(req.email)  # type: ignore
-    if not user or not pbkdf2_sha512.verify(req.password, user.password):
-        raise HTTPException(status_code=400, detail="Invalid Email/Password!")
+    try:
+        if not user or not pbkdf2_sha512.verify(req.password, user.password):
+            raise HTTPException(status_code=400, detail="Invalid Email/Password!")
+    except ValueError:
+        # to support backword compatibility with old password hashing
+        from passlib.context import CryptContext
+
+        verify = CryptContext(schemes=["bcrypt"], deprecated="auto").verify
+        if not user or not verify(req.password, user.password):
+            raise HTTPException(status_code=400, detail="Invalid Email/Password!")
 
     if RESTRICT_UNVERIFIED_USER and not user.is_activated:
         User.send_verification_code(await create_code(ObjectId(user.id)), req.email)
